@@ -44,31 +44,50 @@
 		heightPx = Math.round((widthPx * ratioH) / ratioW);
 	}
 
+	let widthError = $state('');
+	let heightError = $state('');
+	let customRatioError = $state('');
+
 	function applyCustomRatio() {
 		const w = parseFloat(customRatioW);
 		const h = parseFloat(customRatioH);
-		if (w > 0 && h > 0) {
-			ratioW = w;
-			ratioH = h;
-			activePreset = null;
-			heightPx = Math.round((widthPx * h) / w);
+		if (!customRatioW || !customRatioH || isNaN(w) || isNaN(h)) {
+			customRatioError = 'Enter valid numbers for both W and H.';
+			return;
 		}
+		if (w <= 0 || h <= 0) {
+			customRatioError = 'Values must be greater than zero.';
+			return;
+		}
+		customRatioError = '';
+		ratioW = w;
+		ratioH = h;
+		activePreset = null;
+		heightPx = Math.round((widthPx * h) / w);
 	}
 
 	function onWidthChange(e: Event) {
-		const v = parseInt((e.target as HTMLInputElement).value);
-		if (v > 0) {
-			widthPx = v;
-			heightPx = Math.round((v * ratioH) / ratioW);
+		const raw = (e.target as HTMLInputElement).value;
+		const v = parseInt(raw);
+		if (!raw || isNaN(v) || v <= 0) {
+			widthError = 'Enter a positive integer.';
+			return;
 		}
+		widthError = '';
+		widthPx = v;
+		heightPx = Math.round((v * ratioH) / ratioW);
 	}
 
 	function onHeightChange(e: Event) {
-		const v = parseInt((e.target as HTMLInputElement).value);
-		if (v > 0) {
-			heightPx = v;
-			widthPx = Math.round((v * ratioW) / ratioH);
+		const raw = (e.target as HTMLInputElement).value;
+		const v = parseInt(raw);
+		if (!raw || isNaN(v) || v <= 0) {
+			heightError = 'Enter a positive integer.';
+			return;
 		}
+		heightError = '';
+		heightPx = v;
+		widthPx = Math.round((v * ratioW) / ratioH);
 	}
 
 	// Observe preview container size
@@ -167,9 +186,13 @@
 					Apply
 				</button>
 			</div>
-			<p class="mt-1.5 text-xs text-muted-foreground">
-				Current: {ratioW}:{ratioH}
-			</p>
+			{#if customRatioError}
+				<p class="mt-1 text-xs text-red-400">{customRatioError}</p>
+			{:else}
+				<p class="mt-1.5 text-xs text-muted-foreground">
+					Current: {ratioW}:{ratioH}
+				</p>
+			{/if}
 		</div>
 
 		<div>
@@ -187,8 +210,11 @@
 						min="1"
 						value={widthPx}
 						onchange={onWidthChange}
-						class="w-full rounded-md border border-border bg-input px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+						class="w-full rounded-md border {widthError ? 'border-red-500' : 'border-border'} bg-input px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
 					/>
+					{#if widthError}
+						<p class="mt-1 text-xs text-red-400">{widthError}</p>
+					{/if}
 				</div>
 				<div>
 					<label class="block text-xs text-muted-foreground mb-1" for="height-input">
@@ -200,8 +226,11 @@
 						min="1"
 						value={heightPx}
 						onchange={onHeightChange}
-						class="w-full rounded-md border border-border bg-input px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+						class="w-full rounded-md border {heightError ? 'border-red-500' : 'border-border'} bg-input px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
 					/>
+					{#if heightError}
+						<p class="mt-1 text-xs text-red-400">{heightError}</p>
+					{/if}
 				</div>
 			</div>
 		</div>

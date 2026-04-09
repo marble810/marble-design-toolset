@@ -22,17 +22,17 @@
 	});
 
 	// Active tool state
-	let activeToolId = $state(tools[0]?.id ?? 'aspect-ratio');
+	let activeToolId = $state<string | null>(tools[0]?.id ?? null);
 	let openToolSelector = $state(false);
 
-	let activeTool = $derived(tools.find((t) => t.id === activeToolId) ?? tools[0]);
+	let activeTool = $derived(tools.find((t) => t.id === activeToolId) ?? null);
 
 	// Component map — add more tools here as they're created
 	const componentMap: Record<string, typeof AspectRatio> = {
 		'aspect-ratio': AspectRatio
 	};
 
-	let ActiveComponent = $derived(componentMap[activeToolId]);
+	let ActiveComponent = $derived(activeToolId ? componentMap[activeToolId] : null);
 
 	function selectTool(id: string) {
 		activeToolId = id;
