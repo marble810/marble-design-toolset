@@ -1,0 +1,6 @@
+{
+  "name": "Aspect Ratio Calculator",
+  "desc": "Calculate and visualize aspect ratios. Enter width or height to auto-calculate the other dimension.",
+  "tag": ["layout", "dimensions", "calculator"],
+  "version": "1.0.0"
+}
