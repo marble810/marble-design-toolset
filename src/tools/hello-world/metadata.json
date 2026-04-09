@@ -1,0 +1,6 @@
+{
+  "name": "Hello World",
+  "desc": "A simple tool to display a hello world message.",
+  "tag": ["example", "beginner", "tutorial"],
+  "version": "1.0.0"
+}
