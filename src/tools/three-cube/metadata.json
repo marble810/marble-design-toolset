@@ -1,0 +1,6 @@
+{
+	"name": "Three Cube",
+	"desc": "A minimal Three.js demo that renders a rotating cube in the shared preview stage.",
+	"tag": ["three", "3d", "example"],
+	"version": "1.0.0"
+}

@@ -1,42 +1,27 @@
-# sv
+# Marble Design Toolset
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+Marble Design Toolset 是一个基于 SvelteKit 的 Pixel Tool Framework，用来承载多个横屏设计工具。当前框架已经提供统一的 workspace shell、tool runtime、共享 UI 包装层以及按需 tech stack 加载机制。
 
-## Creating a project
+## 文档入口
 
-If you're seeing this, you've probably already done this step. Congrats!
+- 架构设计：`docs/pixel-tool-framework-architecture.md`
+- Tool 开发指南：`docs/tool-authoring-guide.md`
+- OpenSpec 变更：`openspec/changes/establish-pixel-tool-framework/`
 
-```sh
-# create a new project
-npx sv create my-app
-```
+## 开发命令
 
-To recreate this project with the same configuration:
-
-```sh
-# recreate this project
-npx sv@0.15.0 create --template minimal --no-types --install npm .
-```
-
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```sh
+```bash
 npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
-```
-
-## Building
-
-To create a production version of your app:
-
-```sh
 npm run build
+npm run preview
 ```
 
-You can preview the production build with `npm run preview`.
+## 当前框架约束
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+- 不使用 Tailwind，统一使用 CSS Custom Properties 和 px 单位
+- 共享 UI 文案使用英文
+- 应用按纯横屏设计，视口宽度小于 720px 时阻止正常工作区渲染
+- tool 必须遵循 `src/tools/<tool-id>/metadata.json + index.ts + 单一 master .svelte + components/` 的目录 schema
+- heavy tech stack 通过共享 runtime 声明并加载，目前支持 `three`、`pixi`、`gsap`
+
+如果要新增 tool，请直接从 `docs/tool-authoring-guide.md` 开始。
