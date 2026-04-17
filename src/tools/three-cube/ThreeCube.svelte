@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { LeftPanel, PreviewCanvas, RightPanel, Section } from '$lib/components/shell/index.js';
+	import { LeftPanel, FullStage, RightPanel, Section } from '$lib/components/shell/index.js';
 	import CubeViewport from './components/CubeViewport.svelte';
 </script>
 
@@ -7,23 +7,23 @@
 	<Section title="Overview">
 		<p class="three-cube__copy">
 			This example proves the tool runtime can lazy-load Three.js and mount a live WebGL scene
-			inside the shared preview canvas.
+			inside a full-bleed FullStage container.
 		</p>
 	</Section>
 
 	<Section title="Scene" collapsible>
 		<ul class="three-cube__list">
 			<li>One spinning cube with directional lighting</li>
-			<li>Resize-aware renderer bound to the preview stage</li>
-			<li>Shared toolbar still controls fit, zoom, and pan</li>
+			<li>Resize-aware renderer bound to the FullStage container</li>
+			<li>Tool owns the entire right panel area with no framework toolbar</li>
 		</ul>
 	</Section>
 </LeftPanel>
 
 <RightPanel>
-	<PreviewCanvas contentWidth={720} contentHeight={480} label="Three.js Cube Demo">
+	<FullStage>
 		<CubeViewport />
-	</PreviewCanvas>
+	</FullStage>
 </RightPanel>
 
 <style>

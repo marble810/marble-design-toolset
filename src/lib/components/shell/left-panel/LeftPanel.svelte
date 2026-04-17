@@ -27,17 +27,23 @@
 
 <style>
 	.left-panel {
+		--space-2: 3px;
+		--space-3: 6px;
+		--space-4: 10px;
+		--space-5: 12px;
+		--space-6: 18px;
 		display: flex;
 		flex-direction: column;
 		min-height: 0;
 		overflow: auto;
-		gap: var(--space-3);
+		gap: var(--space-2);
+		background-color: var(--color-bg-left-panel);
 	}
 
 	.left-panel__sections {
 		display: flex;
 		flex-direction: column;
-		gap: var(--space-3);
-		padding-right: var(--space-1);
+		gap: var(--space-2);
+		padding-right: 0;
 	}
 </style>

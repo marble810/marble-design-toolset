@@ -3,9 +3,6 @@
 只保留必须严格遵守的框架级约束；更完整背景见 docs/pixel-tool-framework-architecture.md 与 openspec/changes/establish-pixel-tool-framework/。
 
 ## Hard Constraints
-
-- 当用户要求编写docs时，唤起以Claude Sonnet 4.6作为模型的subagent进行编写
-
 - 样式基础层不得继续使用 Tailwind；统一使用 CSS Custom Properties 和 px 单位。
 - 当前共享 UI 文案只写英文；应用按纯横屏设计；视口宽度小于 720px 时必须阻止正常工作区渲染。
 - 交互型基础组件优先基于 Bits UI 包装：Button、Dialog、DropdownMenu、Popover、Collapsible、Tabs。
@@ -16,3 +13,5 @@
 - `tool-id` 使用 kebab-case；master 组件文件名使用与 `tool-id` 对应的 PascalCase；工具根目录只允许一个 root-level `.svelte`。
 - `metadata.json` 只放静态元数据；`index.ts` 负责 runtime definition；tool 组件按需懒加载。
 - 可选技术栈只声明并通过共享 runtime 加载 `three`、`pixi`、`gsap`；不要在无声明前提下直接把重型依赖耦合进通用壳层。
+- OpenSpec 文档（proposal、design、specs、tasks 等 artifact）统一使用中文撰写。
+- docs/ 目录下的开发者文档统一使用中文撰写。

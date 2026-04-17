@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { LeftPanel, PreviewCanvas, RightPanel, Section } from '$lib/components/shell/index.js';
-	import AspectRatioPreview from './components/AspectRatioPreview.svelte';
 	import DimensionFields from './components/DimensionFields.svelte';
 	import PresetGrid from './components/PresetGrid.svelte';
 
@@ -142,9 +141,7 @@
 </LeftPanel>
 
 <RightPanel>
-	<PreviewCanvas contentWidth={widthPx} contentHeight={heightPx} label={`${widthPx} × ${heightPx} px`}>
-		<AspectRatioPreview ratioLabel={ratioLabel} {widthPx} {heightPx} />
-	</PreviewCanvas>
+
 </RightPanel>
 
 <style>

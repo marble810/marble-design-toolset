@@ -67,7 +67,7 @@
 			{#snippet child({ wrapperProps, props, open })}
 				{#if open}
 					<div {...wrapperProps}>
-						<div {...props} class="dropdown-menu__content">
+						<div {...props} class="dropdown-menu__content pixel-frame">
 							{#each items as item}
 								{#if item.separator}
 									<BitsDropdownMenu.Separator class="dropdown-menu__separator" />
@@ -96,10 +96,6 @@
 		flex-direction: column;
 		min-width: 176px;
 		padding: var(--space-2);
-		border: var(--border-width-outer) solid transparent;
-		border-image-source: var(--pixel-border-source);
-		border-image-slice: 4 fill;
-		border-image-width: 4px;
 		background: var(--color-bg-surface);
 		box-shadow: 0 18px 42px rgba(0, 0, 0, 0.42);
 	}

@@ -160,14 +160,14 @@ Framework 负责：
 - tool catalog 发现与 hash 路由
 - `ToolShell` 的创建和挂载
 - `MainInfo` 的渲染
-- `PreviewCanvas` 的缩放、平移、Fit 和 1:1 工具栏
+- 提供可选的右侧容器组件（`PreviewCanvas` 用于 2D 预览，`FullStage` 用于全出血场景）
 - heavy tech stack 的预加载
 - 视口宽度小于 720px 时的阻断屏幕
 
 Tool 只负责两件事：
 
 - 左侧参数和信息内容
-- 右侧预览内容
+- 右侧内容（自由选择使用 PreviewCanvas、FullStage 或自定义内容填充 RightPanel）
 
 这个边界不是建议，而是框架能正常工作的前提。tool 如果重写 shell 层、重新造一套 workspace 结构，得到的不是扩展，而是破坏。
 
@@ -259,7 +259,7 @@ export default definition;
 
 它不应该包含 workspace shell 级别的内容，比如 header、tabs、settings、全局 dialog 等，也不需要再套一层 `ToolShell`。
 
-推荐基础结构：
+推荐基础结构（2D 预览工具）：
 
 ```svelte
 <script lang="ts">
@@ -280,6 +280,44 @@ export default definition;
   <PreviewCanvas contentWidth={640} contentHeight={360} label="Preview">
     <!-- 预览内容 -->
   </PreviewCanvas>
+</RightPanel>
+```
+
+推荐基础结构（全出血场景，如 WebGL/视频）：
+
+```svelte
+<script lang="ts">
+  import { LeftPanel, FullStage, RightPanel, Section } from '$lib/components/shell/index.js';
+</script>
+
+<LeftPanel>
+  <Section title="Controls">
+    <!-- 参数区内容 -->
+  </Section>
+</LeftPanel>
+
+<RightPanel>
+  <FullStage>
+    <!-- WebGL canvas 或全屏交互内容 -->
+  </FullStage>
+</RightPanel>
+```
+
+推荐基础结构（自由内容）：
+
+```svelte
+<script lang="ts">
+  import { LeftPanel, RightPanel, Section } from '$lib/components/shell/index.js';
+</script>
+
+<LeftPanel>
+  <Section title="Controls">
+    <!-- 参数区内容 -->
+  </Section>
+</LeftPanel>
+
+<RightPanel>
+  <!-- 任意自定义内容，无缩放/平移/棋盘格 -->
 </RightPanel>
 ```
 
@@ -380,13 +418,19 @@ npm run build
 
 构建通过就意味着 tool 已经自动出现在 catalog 里了。
 
+## 选择右侧呈现模式
+
+工具可以从三种右侧面板呈现模式中选择：
+
+| 模式 | 适用场景 | 提供的能力 |
+| --- | --- | --- |
+| `PreviewCanvas` | 固定尺寸的 2D 内容预览 | 缩放/适配/平移、棋盘格背景、工具栏 |
+| `FullStage` | WebGL、视频、全屏交互 | 全出血容器，工具自行管理全部交互 |
+| 自由内容 | 列表、表格、文档等 | 无框架预设，完全自定义 |
+
 ## 接入 PreviewCanvas
 
-`PreviewCanvas` 是 framework 提供的统一预览舞台。它内置了 Fit、1:1、缩放和平移功能。你只需要：
-
-1. 传入逻辑内容尺寸 `contentWidth` 和 `contentHeight`
-2. 传入工具栏标签 `label`
-3. 把预览内容作为子元素放进去
+`PreviewCanvas` 是 framework 提供的可选 2D 预览舞台。它内置了 Fit、1:1、缩放和平移功能。适用于有明确宽高的固定画布内容。
 
 基础用法：
 
@@ -407,6 +451,7 @@ npm run build
 | `contentWidth` | `number` | 逻辑内容宽度，单位 px |
 | `contentHeight` | `number` | 逻辑内容高度，单位 px |
 | `label` | `string` | 工具栏左侧的英文标签 |
+| `actions` | `Snippet` | 可选，在工具栏缩放控制后渲染额外控件 |
 
 约束：
 
@@ -414,7 +459,41 @@ npm run build
 - 缩放、平移、Fit 和 1:1 交给 `PreviewCanvas`
 - 不要在子内容里再造一套预览工具栏
 
-对于 WebGL 或 canvas 宿主，推荐方式是在 `PreviewCanvas` 内部渲染一个占满的宿主元素，用 `ResizeObserver` 监听尺寸，再把渲染器绑定到宿主 DOM。完整参考见 `src/tools/three-cube/components/CubeViewport.svelte`。
+如果需要在工具栏中添加自定义控件（例如网格开关），使用 `actions` snippet：
+
+```svelte
+<PreviewCanvas contentWidth={640} contentHeight={360} label="Layout Preview">
+  {#snippet actions()}
+    <Button variant="ghost" size="sm" onclick={toggleGrid}>Grid</Button>
+  {/snippet}
+  <div class="my-preview"><!-- 内容 --></div>
+</PreviewCanvas>
+```
+
+## 接入 FullStage
+
+`FullStage` 是 framework 提供的最小化全出血容器。适用于 WebGL 渲染器、视频播放器或任何需要占满整个右侧面板区域的场景。
+
+FullStage 不提供缩放控制、工具栏或背景装饰——工具自行管理一切。
+
+基础用法：
+
+```svelte
+<RightPanel>
+  <FullStage>
+    <MyWebGLViewport />
+  </FullStage>
+</RightPanel>
+```
+
+关键特性：
+
+- `flex: 1` 填满整个右侧面板
+- `overflow: hidden` 防止内容溢出
+- `position: relative` 支持绝对定位子元素（如悬浮 HUD）
+- 不做任何视觉装饰
+
+对于 WebGL 或 canvas 宿主，推荐方式是在 `FullStage` 内部渲染一个占满的宿主元素，用 `ResizeObserver` 监听尺寸，再把渲染器绑定到宿主 DOM。完整参考见 `src/tools/three-cube/components/CubeViewport.svelte`。
 
 ## 使用 Heavy Tech Stack
 

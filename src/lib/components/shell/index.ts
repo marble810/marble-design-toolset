@@ -4,3 +4,4 @@ export * from './right-panel/index.js';
 export * from './main-info/index.js';
 export * from './section/index.js';
 export * from './preview-canvas/index.js';
+export * from './full-stage/index.js';

@@ -23,7 +23,7 @@
 		children
 	}: Props = $props();
 
-	let contentClass = $derived(`dialog__content dialog__content--${width}${className ? ` ${className}` : ''}`);
+	let contentClass = $derived(`dialog__content pixel-frame dialog__content--${width}${className ? ` ${className}` : ''}`);
 
 	function closeDialog() {
 		open = false;
@@ -101,15 +101,12 @@
 		z-index: 80;
 		display: flex;
 		flex-direction: column;
-		max-height: min(82vh, 760px);
 		width: min(calc(100vw - 48px), 780px);
+		max-height: min(82vh, 760px);
+		min-height: 0;
 		transform: translate(-50%, -50%);
-		border: var(--border-width-outer) solid transparent;
-		border-image-source: var(--pixel-border-source);
-		border-image-slice: 4 fill;
-		border-image-width: 4px;
-		background: var(--color-bg-surface);
 		box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+		background: var(--color-bg-surface);
 	}
 
 	.dialog__content--sm {

@@ -8,15 +8,17 @@
 	let { children }: Props = $props();
 </script>
 
-<section class="right-panel">
+<div class="full-stage">
 	{@render children?.()}
-</section>
+</div>
 
 <style>
-	.right-panel {
+	.full-stage {
+		position: relative;
 		display: flex;
+		flex: 1 1 auto;
 		min-width: 0;
 		min-height: 0;
-		background: var(--color-bg-right-panel);
+		overflow: hidden;
 	}
 </style>

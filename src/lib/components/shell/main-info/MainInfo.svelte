@@ -61,6 +61,7 @@
 	.main-info {
 		display: flex;
 		flex-direction: column;
+		flex-shrink: 0;
 		padding: var(--space-4);
 		gap: var(--space-3);
 		background: rgba(149, 128, 255, 0.08);

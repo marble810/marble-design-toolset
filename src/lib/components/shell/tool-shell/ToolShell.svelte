@@ -17,8 +17,9 @@
 	.tool-shell {
 		display: grid;
 		grid-template-columns: minmax(288px, var(--tool-shell-left-panel-width)) minmax(0, 1fr);
+		grid-template-rows: 1fr;
 		height: 100%;
 		min-height: 0;
-		gap: var(--space-4);
+		gap: var(--space-2);
 	}
 </style>

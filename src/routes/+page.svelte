@@ -194,11 +194,11 @@
 <div class="workspace">
 	<header class="workspace__header">
 		<div class="workspace__brand">
-			<div class="workspace__brand-icon">
+			<!-- <div class="workspace__brand-icon">
 				<PixelIcon name="aspect-ratio" size={18} />
-			</div>
+			</div> -->
 			<div class="workspace__brand-copy">
-				<span class="workspace__eyebrow">Pixel Tool Framework</span>
+				<!-- <span class="workspace__eyebrow">Pixel Tool Framework</span> -->
 				<strong class="workspace__title">Marble Design Toolset</strong>
 			</div>
 		</div>

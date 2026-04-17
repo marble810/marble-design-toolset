@@ -6,10 +6,11 @@
 		contentWidth: number;
 		contentHeight: number;
 		label?: string;
+		actions?: Snippet;
 		children?: Snippet;
 	}
 
-	let { contentWidth, contentHeight, label = '', children }: Props = $props();
+	let { contentWidth, contentHeight, label = '', actions, children }: Props = $props();
 
 	let viewportElement = $state<HTMLDivElement | null>(null);
 	let viewportWidth = $state(0);
@@ -115,7 +116,7 @@
 	}
 </script>
 
-<section class="preview-canvas pixel-frame">
+<section class="preview-canvas">
 	<div class="preview-canvas__toolbar">
 		<div class="preview-canvas__meta">
 			{#if label}
@@ -129,6 +130,10 @@
 			<Button variant="ghost" size="sm" onclick={setActualSize}>1:1</Button>
 			<Button variant="ghost" size="icon" aria-label="Zoom out" onclick={() => nudgeZoom(0.9)}>-</Button>
 			<Button variant="ghost" size="icon" aria-label="Zoom in" onclick={() => nudgeZoom(1.1)}>+</Button>
+			{#if actions}
+				<span class="preview-canvas__separator"></span>
+				{@render actions()}
+			{/if}
 		</div>
 	</div>
 
@@ -168,8 +173,8 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		gap: var(--space-4);
-		padding: var(--space-4);
+		gap: var(--space-2);
+		padding: var(--space-1);
 		border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 	}
 
@@ -199,6 +204,13 @@
 		display: inline-flex;
 		align-items: center;
 		gap: var(--space-2);
+	}
+
+	.preview-canvas__separator {
+		width: 1px;
+		height: 16px;
+		margin: 0 var(--space-2);
+		background: rgba(255, 255, 255, 0.08);
 	}
 
 	.preview-canvas__viewport {

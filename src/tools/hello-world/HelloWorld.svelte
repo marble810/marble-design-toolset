@@ -16,6 +16,83 @@
             <li>Shared preview canvas with fit and zoom controls</li>
         </ul>
     </Section>
+    <Section title="What It Covers" collapsible>
+        <ul class="hello-world__list">
+            <li>Framework-owned header and tab runtime</li>
+            <li>Tool-owned left panel and preview content</li>
+            <li>Shared preview canvas with fit and zoom controls</li>
+        </ul>
+    </Section>
+    <Section title="What It Covers" collapsible>
+        <ul class="hello-world__list">
+            <li>Framework-owned header and tab runtime</li>
+            <li>Tool-owned left panel and preview content</li>
+            <li>Shared preview canvas with fit and zoom controls</li>
+        </ul>
+    </Section>
+    <Section title="What It Covers" collapsible>
+        <ul class="hello-world__list">
+            <li>Framework-owned header and tab runtime</li>
+            <li>Tool-owned left panel and preview content</li>
+            <li>Shared preview canvas with fit and zoom controls</li>
+        </ul>
+    </Section>
+    <Section title="What It Covers" collapsible>
+        <ul class="hello-world__list">
+            <li>Framework-owned header and tab runtime</li>
+            <li>Tool-owned left panel and preview content</li>
+            <li>Shared preview canvas with fit and zoom controls</li>
+        </ul>
+    </Section>
+    <Section title="What It Covers" collapsible>
+        <ul class="hello-world__list">
+            <li>Framework-owned header and tab runtime</li>
+            <li>Tool-owned left panel and preview content</li>
+            <li>Shared preview canvas with fit and zoom controls</li>
+        </ul>
+    </Section>
+    <Section title="What It Covers" collapsible>
+        <ul class="hello-world__list">
+            <li>Framework-owned header and tab runtime</li>
+            <li>Tool-owned left panel and preview content</li>
+            <li>Shared preview canvas with fit and zoom controls</li>
+        </ul>
+    </Section>
+    <Section title="What It Covers" collapsible>
+        <ul class="hello-world__list">
+            <li>Framework-owned header and tab runtime</li>
+            <li>Tool-owned left panel and preview content</li>
+            <li>Shared preview canvas with fit and zoom controls</li>
+        </ul>
+    </Section>
+    <Section title="What It Covers" collapsible>
+        <ul class="hello-world__list">
+            <li>Framework-owned header and tab runtime</li>
+            <li>Tool-owned left panel and preview content</li>
+            <li>Shared preview canvas with fit and zoom controls</li>
+        </ul>
+    </Section>
+    <Section title="What It Covers" collapsible>
+        <ul class="hello-world__list">
+            <li>Framework-owned header and tab runtime</li>
+            <li>Tool-owned left panel and preview content</li>
+            <li>Shared preview canvas with fit and zoom controls</li>
+        </ul>
+    </Section>
+    <Section title="What It Covers" collapsible>
+        <ul class="hello-world__list">
+            <li>Framework-owned header and tab runtime</li>
+            <li>Tool-owned left panel and preview content</li>
+            <li>Shared preview canvas with fit and zoom controls</li>
+        </ul>
+    </Section>
+    <Section title="What It Covers" collapsible>
+        <ul class="hello-world__list">
+            <li>Framework-owned header and tab runtime</li>
+            <li>Tool-owned left panel and preview content</li>
+            <li>Shared preview canvas with fit and zoom controls</li>
+        </ul>
+    </Section>
 </LeftPanel>
 
 <RightPanel>
@@ -26,6 +103,7 @@
             <p class="hello-world__description">
                 The legacy demo page has been replaced by the new workspace shell.
             </p>
+            <p>中文测试中文测试</p>
         </div>
     </PreviewCanvas>
 </RightPanel>

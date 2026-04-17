@@ -55,7 +55,7 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: var(--space-4);
-		padding: var(--space-4);
+		padding: var(--space-3);
 		border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 	}
 
@@ -66,6 +66,7 @@
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
 		color: var(--color-fg-secondary);
+		margin-left: var(--space-2);
 	}
 
 	.section__toggle {

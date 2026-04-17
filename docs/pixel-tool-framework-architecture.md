@@ -65,7 +65,8 @@ Application Workspace
 ├── Workspace Shell
 │   ├── Header / Tabs / Dialogs / Settings
 │   ├── LeftPanel / RightPanel / MainInfo / Section
-│   └── Preview Canvas / Zoom / Grid
+│   ├── PreviewCanvas (opt-in 2D zoom/fit/pan)
+│   └── FullStage (opt-in full-bleed container)
 ├── UI Foundation
 │   ├── CSS Tokens
 │   ├── Bits UI Wrappers
@@ -110,8 +111,9 @@ flowchart TB
 		Tabs["Tab Runtime\nOpen / Activate / Close\nEmpty State"]
 		ToolShell["ToolShell"]
 		LeftPanel["LeftPanel\nMainInfo\nSection Blocks"]
-		RightPanel["RightPanel"]
-		Preview["PreviewCanvas / Stage\nCheckerboard\nFit / 1:1 / Zoom / Pan"]
+		RightPanel["RightPanel\n视觉基线容器"]
+		Preview["PreviewCanvas (opt-in)\nCheckerboard\nFit / 1:1 / Zoom / Pan"]
+		FullStage["FullStage (opt-in)\nFull-bleed Container"]
 		Settings["Settings Dialog\nleftPanelWidth"]
 	end
 
@@ -143,6 +145,7 @@ flowchart TB
 	ToolShell --> LeftPanel
 	ToolShell --> RightPanel
 	RightPanel --> Preview
+	RightPanel --> FullStage
 	Header --> Settings
 
 	Metadata --> Registry
@@ -163,6 +166,7 @@ flowchart TB
 	Assets --> ToolShell
 	Tokens --> ToolShell
 	Tokens --> Preview
+	Tokens --> FullStage
 	Registry --> Metadata
 ```
 
