@@ -7,6 +7,7 @@ export interface ToolMetadata {
 	desc: string;
 	tag: string[];
 	version: string;
+	enabled?: boolean;
 }
 
 export interface ToolMenuAction {

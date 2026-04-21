@@ -381,7 +381,7 @@ src/tools/{tool-id}/
 - 主入口组件 `{ToolName}.svelte` 必须与 `tool-id` 严格对应
 - 根目录只允许存在一个主入口 `.svelte`
 - 额外的 `.svelte` 子组件必须放到 `components/` 内
-- `metadata.json` 只承载静态元数据
+- `metadata.json` 只承载静态元数据与静态可用性开关
 - `index.ts` 承载 tool 运行时定义
 
 示例：
@@ -411,6 +411,7 @@ export interface ToolMetadata {
 	desc: string;
 	tag: string[];
 	version: string;
+	enabled?: boolean;
 }
 
 export interface ToolMenuAction {
@@ -632,6 +633,7 @@ interface WorkspaceState {
 原因：
 
 - tool 列表、Open 菜单、About 信息需要快速获得元数据
+- tool 是否处于启用状态需要在不加载运行时代码的前提下被判定
 - tool 组件和大依赖不能首屏全部打包进来
 
 ## 13.2 加载流程
@@ -639,7 +641,7 @@ interface WorkspaceState {
 ```text
 App boot
   -> eager load all metadata.json
-  -> build tool catalog
+	-> build enabled tool catalog
 User opens tool
   -> lazy import src/tools/<id>/index.ts
   -> read techStack declarations

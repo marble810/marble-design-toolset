@@ -1,4 +1,5 @@
 import type { WorkspaceState } from '$lib/types/tool';
+import { sanitizeWorkspaceToolSelection } from './tool-availability.js';
 
 const STORAGE_KEY = 'marble-design-toolset:workspace';
 export const DEFAULT_LEFT_PANEL_WIDTH_VW = 28;
@@ -43,14 +44,7 @@ export function writeHashToolId(toolId: string | null): void {
 }
 
 function sanitizeState(input: Partial<WorkspaceState> | null | undefined, validToolIds: string[]): WorkspaceState {
-	const validIds = new Set(validToolIds);
-	const openToolIds = Array.isArray(input?.openToolIds)
-		? input.openToolIds.filter((toolId): toolId is string => typeof toolId === 'string' && validIds.has(toolId))
-		: [];
-
-	const activeToolId = typeof input?.activeToolId === 'string' && validIds.has(input.activeToolId)
-		? input.activeToolId
-		: openToolIds[0] ?? null;
+	const { openToolIds, activeToolId } = sanitizeWorkspaceToolSelection(input, validToolIds);
 
 	return {
 		openToolIds,

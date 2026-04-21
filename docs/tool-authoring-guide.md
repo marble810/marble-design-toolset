@@ -27,9 +27,39 @@
 | `src/tools/aspect-ratio/` | 参数型 tool 示例 |
 | `src/tools/three-cube/` | heavy tech stack 示例 |
 
+## 推荐方式：先用脚手架
+
+当前仓库已经提供项目内脚手架命令：
+
+```bash
+bun run create:tool
+```
+
+该命令会交互式收集三类核心信息：
+
+- `tool name`
+- `starter type`：`preview` 或 `stage`
+- `tech stacks`：`three`、`pixi`、`gsap` 的逗号分隔选择
+
+脚手架会自动完成这些事情：
+
+- 把输入名称规范化为 `tool-id`、显示名和 PascalCase master 组件名
+- 生成 `metadata.json`、`index.ts`、唯一的 root-level master `.svelte`
+- 在 `components/` 下生成一个 starter 对应的私有子组件
+- 默认写入 `enabled: true`
+- 只在 `index.ts` 中写入 `techStack`，不会污染 `metadata.json`
+
+默认 metadata 如下：
+
+- `desc`: `<Starter> starter scaffold for the <Tool Name> tool.`
+- `tag`: `['starter', '<starter-type>']`
+- `version`: `1.0.0`
+
+如果你需要完全手写或审查脚手架输出，继续阅读下面的手工目录与 contract 说明。
+
 ## 快速上手
 
-如果你想立刻动手，这是最小可运行示例的完整形态。后面的章节会逐一解释每个决策背后的原因。
+如果你想手工创建或审查脚手架生成结果，这是最小可运行示例的完整形态。后面的章节会逐一解释每个决策背后的原因。
 
 目录结构：
 
@@ -48,7 +78,8 @@ src/tools/frame-label/
   "name": "Frame Label",
   "desc": "Add a short label to a fixed-size preview frame.",
   "tag": ["example", "starter", "preview"],
-  "version": "1.0.0"
+  "version": "1.0.0",
+  "enabled": true
 }
 ```
 
@@ -198,9 +229,9 @@ src/tools/<tool-id>/
 
 ### `metadata.json`
 
-`metadata.json` 只放静态展示信息。runtime 会用它生成 catalog、展示 `MainInfo` 的标题和描述，并进行排序。
+`metadata.json` 只放无需加载 tool 运行时代码即可判定的静态元数据。runtime 会用它生成 catalog、展示 `MainInfo` 的标题和描述，并决定工具是否进入可用工具集合。
 
-必填字段：
+支持字段：
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
@@ -208,6 +239,7 @@ src/tools/<tool-id>/
 | `desc` | `string` | 一句英文描述这个 tool 做什么 |
 | `tag` | `string[]` | 英文小写短词数组 |
 | `version` | `string` | 建议使用 semver，例如 `1.0.0` |
+| `enabled` | `boolean` | 可选硬开关。省略时默认按 `true` 处理；设为 `false` 时，该工具不会出现在工具架中，也不会被 hash 或本地恢复重新激活 |
 
 不应该出现在这里的内容：`techStack`、`loadComponent`、组件路径、默认状态、任何 runtime 逻辑。
 
@@ -367,7 +399,8 @@ src/tools/frame-label/
   "name": "Frame Label",
   "desc": "Add a short label to a fixed-size preview frame.",
   "tag": ["example", "starter", "preview"],
-  "version": "1.0.0"
+  "version": "1.0.0",
+  "enabled": true
 }
 ```
 
@@ -651,7 +684,13 @@ loader 内部带缓存，因此顶层预加载和组件内调用都是安全的�
 }
 ```
 
-正确做法：`metadata.json` 只保留 `name`、`desc`、`tag`、`version`，其余都放在 `index.ts`。
+正确做法：`metadata.json` 只保留静态字段：`name`、`desc`、`tag`、`version`，以及可选的 `enabled`；其余都放在 `index.ts`。
+
+### 使用 `enabled: false` 的语义
+
+错误理解：把 `enabled: false` 当成“只是不在工具架显示”。
+
+正确语义：`enabled: false` 是硬开关。工具会同时从工具架、合法 tool id 集合、hash 路由激活和本地持久化恢复中被排除。
 
 ### 根目录放多个 `.svelte`
 
@@ -714,7 +753,7 @@ import * as THREE from 'three';
 - [ ] 目录名使用 kebab-case，可直接作为 runtime id 和 hash route id
 - [ ] 根目录只有一个 master `.svelte`
 - [ ] 所有其他私有 `.svelte` 都放在 `components/`
-- [ ] `metadata.json` 只包含 `name`、`desc`、`tag`、`version`
+- [ ] `metadata.json` 只包含静态字段：`name`、`desc`、`tag`、`version`，以及可选 `enabled`
 - [ ] `metadata.json` 中所有文案均为英文
 - [ ] `index.ts` 使用 `satisfies ToolDefinition`
 - [ ] `index.ts` 末尾有 `export default definition`

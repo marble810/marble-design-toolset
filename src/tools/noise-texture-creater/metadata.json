@@ -1,0 +1,10 @@
+{
+  "name": "Noise Texture Creater",
+  "desc": "Preview starter scaffold for the Noise Texture Creater tool.",
+  "tag": [
+    "starter",
+    "preview"
+  ],
+  "version": "1.0.0",
+  "enabled": true
+}

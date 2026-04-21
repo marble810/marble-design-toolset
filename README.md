@@ -11,10 +11,27 @@ Marble Design Toolset 是一个基于 SvelteKit 的 Pixel Tool Framework，用�
 ## 开发命令
 
 ```bash
+bun run create:tool
 npm run dev
 npm run build
 npm run preview
 ```
+
+## 创建新 Tool
+
+推荐先使用项目内脚手架命令：
+
+```bash
+bun run create:tool
+```
+
+该命令会交互式询问：
+
+- tool name
+- starter type: `preview` 或 `stage`
+- tech stacks: `three`、`pixi`、`gsap`
+
+脚手架会自动生成符合当前 runtime contract 的 `src/tools/<tool-id>/` 目录，包含 `metadata.json`、`index.ts`、唯一的 root-level master `.svelte`，以及位于 `components/` 下的私有子组件。生成后执行 `npm run build` 做一次校验。
 
 ## 当前框架约束
 
@@ -24,4 +41,4 @@ npm run preview
 - tool 必须遵循 `src/tools/<tool-id>/metadata.json + index.ts + 单一 master .svelte + components/` 的目录 schema
 - heavy tech stack 通过共享 runtime 声明并加载，目前支持 `three`、`pixi`、`gsap`
 
-如果要新增 tool，请直接从 `docs/tool-authoring-guide.md` 开始。
+如果要新增 tool，先运行 `bun run create:tool`，再结合 `docs/tool-authoring-guide.md` 完成后续开发。

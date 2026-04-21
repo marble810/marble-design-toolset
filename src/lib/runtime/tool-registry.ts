@@ -1,4 +1,5 @@
 import type { ToolCatalogItem, ToolDefinition, ToolMetadata } from '$lib/types/tool';
+import { filterEnabledTools } from './tool-availability.js';
 
 type MetadataModule = ToolMetadata | { default: ToolMetadata };
 type DefinitionModule = { default: ToolDefinition };
@@ -21,12 +22,12 @@ function pathToToolId(path: string): string {
 	return path.replace('/src/tools/', '').replace('/metadata.json', '').replace('/index.ts', '');
 }
 
-const catalog = Object.entries(metadataModules)
-	.map(([path, module]) => ({
+const catalog = filterEnabledTools(
+	Object.entries(metadataModules).map(([path, module]) => ({
 		id: pathToToolId(path),
 		...unwrapMetadata(module)
 	}))
-	.sort((left, right) => left.name.localeCompare(right.name));
+).sort((left, right) => left.name.localeCompare(right.name));
 
 const catalogIds = new Set(catalog.map((item) => item.id));
 
@@ -43,6 +44,10 @@ export function isValidToolId(toolId: string | null | undefined): toolId is stri
 }
 
 export async function loadToolDefinition(toolId: string): Promise<ToolDefinition> {
+	if (!catalogIds.has(toolId)) {
+		throw new Error(`Unknown or disabled tool definition: ${toolId}`);
+	}
+
 	const definitionPath = `/src/tools/${toolId}/index.ts`;
 	const loader = definitionModules[definitionPath];
 
