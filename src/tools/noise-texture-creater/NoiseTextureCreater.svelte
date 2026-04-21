@@ -1,6 +1,18 @@
 <script lang="ts">
 	import { LeftPanel, PreviewCanvas, RightPanel, Section } from '$lib/components/shell/index.js';
-	import NoiseTextureCreaterPreview from './components/NoiseTextureCreaterPreview.svelte';
+	
+	import { Application, Assets, Sprite } from 'pixi.js';
+
+	(async () =>{
+		const app = new Application();
+		
+		await app.init({
+			background: '#0000000', resizeTo: window
+		});
+
+		document.body.appendChild(app.canvas);
+	})
+
 </script>
 
 <LeftPanel>
@@ -21,7 +33,6 @@
 
 <RightPanel>
 	<PreviewCanvas contentWidth={512} contentHeight={512} label="Noise Texture Creater Preview">
-		<NoiseTextureCreaterPreview />
 	</PreviewCanvas>
 </RightPanel>
 

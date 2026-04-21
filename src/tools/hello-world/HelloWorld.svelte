@@ -131,8 +131,6 @@
         height: 100%;
         padding: 32px;
         background: #1a2130;
-        border: 2px solid rgba(149, 128, 255, 0.65);
-        box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.04);
     }
 
     .hello-world__badge {

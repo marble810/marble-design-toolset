@@ -1,22 +1,49 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
+	import {
+		clampPreviewCanvasZoom,
+		computePreviewCanvasFitZoom,
+		computePreviewCanvasRenderScale,
+		resolvePreviewCanvasDefaultMode
+	} from './zoom.js';
+	import type { PreviewCanvasFooterInfo } from './footer-info.js';
+	import PreviewCanvasFooter from './PreviewCanvasFooter.svelte';
 
 	interface Props {
+		/** Logical preview content width in px before PreviewCanvas applies zoom. */
 		contentWidth: number;
+		/** Logical preview content height in px before PreviewCanvas applies zoom. */
 		contentHeight: number;
+		/** Optional toolbar label shown on the left side of the PreviewCanvas header. */
 		label?: string;
+		/** Initial zoom mode when the preview opens. Defaults to `Fit`. */
+		defaultZoom?: 'Fit' | '1:1';
+		/** Optional toolbar controls rendered after the built-in zoom actions. */
 		actions?: Snippet;
+		/** Optional footer info rendered outside the canvas frame and anchored to its bottom-right corner. */
+		footerInfo?: PreviewCanvasFooterInfo | null;
+		/** Preview content rendered inside the zoomable stage. */
 		children?: Snippet;
 	}
 
-	let { contentWidth, contentHeight, label = '', actions, children }: Props = $props();
+	let {
+		contentWidth,
+		contentHeight,
+		label = '',
+		defaultZoom = 'Fit',
+		actions,
+		footerInfo = null,
+		children
+	}: Props = $props();
 
 	let viewportElement = $state<HTMLDivElement | null>(null);
 	let viewportWidth = $state(0);
 	let viewportHeight = $state(0);
+	let devicePixelRatio = $state(1);
+	let initialMode = $derived<'fit' | 'manual'>(resolvePreviewCanvasDefaultMode(defaultZoom));
 	let mode = $state<'fit' | 'manual'>('fit');
-	let manualScale = $state(1);
+	let manualZoom = $state(1);
 	let panX = $state(0);
 	let panY = $state(0);
 	let isPanning = $state(false);
@@ -24,59 +51,116 @@
 	let dragStartY = $state(0);
 	let dragOriginX = $state(0);
 	let dragOriginY = $state(0);
+	let hasInitializedMode = $state(false);
 
-	$effect(() => {
-		if (!viewportElement) {
+	$effect.pre(() => {
+		if (hasInitializedMode) {
 			return;
 		}
 
+		mode = initialMode;
+		hasInitializedMode = true;
+	});
+
+	$effect(() => {
+		if (!viewportElement || typeof window === 'undefined') {
+			return;
+		}
+
+		const updateViewport = (rect?: DOMRectReadOnly) => {
+			if (rect) {
+				viewportWidth = rect.width;
+				viewportHeight = rect.height;
+				return;
+			}
+
+			viewportWidth = viewportElement.clientWidth;
+			viewportHeight = viewportElement.clientHeight;
+		};
+
+		const updateDevicePixelRatio = () => {
+			devicePixelRatio = window.devicePixelRatio || 1;
+		};
+
 		const resizeObserver = new ResizeObserver((entries) => {
 			for (const entry of entries) {
-				viewportWidth = entry.contentRect.width;
-				viewportHeight = entry.contentRect.height;
+				updateViewport(entry.contentRect);
 			}
 		});
 
+		const handleViewportChange = () => {
+			updateDevicePixelRatio();
+			updateViewport();
+		};
+
+		let resolutionQuery = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+		const handleResolutionChange = () => {
+			updateDevicePixelRatio();
+			updateViewport();
+			resolutionQuery.removeEventListener('change', handleResolutionChange);
+			resolutionQuery = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+			resolutionQuery.addEventListener('change', handleResolutionChange);
+		};
+
+		updateDevicePixelRatio();
+		updateViewport();
 		resizeObserver.observe(viewportElement);
-		return () => resizeObserver.disconnect();
+		window.addEventListener('resize', handleViewportChange);
+		window.visualViewport?.addEventListener('resize', handleViewportChange);
+		resolutionQuery.addEventListener('change', handleResolutionChange);
+
+		return () => {
+			resizeObserver.disconnect();
+			window.removeEventListener('resize', handleViewportChange);
+			window.visualViewport?.removeEventListener('resize', handleViewportChange);
+			resolutionQuery.removeEventListener('change', handleResolutionChange);
+		};
 	});
 
-	let fitScale = $derived.by(() => {
-		if (!viewportWidth || !viewportHeight || !contentWidth || !contentHeight) {
-			return 1;
-		}
+	let fitZoom = $derived.by(() =>
+		computePreviewCanvasFitZoom({
+			viewportWidth,
+			viewportHeight,
+			contentWidth,
+			contentHeight,
+			devicePixelRatio,
+			padding: 72
+		})
+	);
 
-		const padding = 72;
-		const availableWidth = Math.max(viewportWidth - padding, 1);
-		const availableHeight = Math.max(viewportHeight - padding, 1);
+	let resolvedZoom = $derived(mode === 'fit' ? fitZoom : manualZoom);
+	let renderScale = $derived(computePreviewCanvasRenderScale(resolvedZoom, devicePixelRatio));
+	let zoomPercent = $derived(Math.round(resolvedZoom * 100));
+	const footerScaleFactor = 1.8;
+	const footerMinScale = 0.75;
+	const footerMaxScale = 2.5;
+	let footerRenderScale = $derived(
+		Math.min(footerMaxScale, Math.max(footerMinScale, renderScale * footerScaleFactor))
+	);
+	const footerAnchorOffsetX = 1;
+	let footerAnchorX = $derived(panX + (contentWidth * renderScale) / 2 + footerAnchorOffsetX);
+	let footerAnchorY = $derived(panY + (contentHeight * renderScale) / 2);
 
-		return Math.min(availableWidth / contentWidth, availableHeight / contentHeight);
-	});
-
-	let resolvedScale = $derived(mode === 'fit' ? fitScale : manualScale);
-	let zoomPercent = $derived(Math.round(resolvedScale * 100));
-
-	function clampScale(scale: number): number {
-		return Math.min(16, Math.max(0.1, scale));
+	function resetPan() {
+		panX = 0;
+		panY = 0;
 	}
 
 	function setFit() {
 		mode = 'fit';
-		panX = 0;
-		panY = 0;
+		resetPan();
 	}
 
 	function setActualSize() {
 		mode = 'manual';
-		manualScale = 1;
-		panX = 0;
-		panY = 0;
+		manualZoom = 1;
+		resetPan();
 	}
 
 	function nudgeZoom(multiplier: number) {
-		const baseScale = mode === 'fit' ? fitScale : manualScale;
+		const baseZoom = mode === 'fit' ? fitZoom : manualZoom;
 		mode = 'manual';
-		manualScale = clampScale(baseScale * multiplier);
+		manualZoom = clampPreviewCanvasZoom(baseZoom * multiplier);
 	}
 
 	function handleWheel(event: WheelEvent) {
@@ -137,23 +221,34 @@
 		</div>
 	</div>
 
-	<div
-		class="preview-canvas__viewport pixel-checkerboard"
-		role="region"
-		aria-label="Preview canvas"
-		bind:this={viewportElement}
-		onwheel={handleWheel}
-		onpointerdown={handlePointerDown}
-		onpointermove={handlePointerMove}
-		onpointerup={handlePointerEnd}
-		onpointercancel={handlePointerEnd}
-	>
-		<div class="preview-canvas__center">
-			<div
-				class="preview-canvas__content"
-				style={`width:${contentWidth}px;height:${contentHeight}px;transform: translate(${panX}px, ${panY}px) scale(${resolvedScale});`}
-			>
-				{@render children?.()}
+	<div class="preview-canvas__surface">
+		<div
+			class="preview-canvas__viewport pixel-checkerboard"
+			role="region"
+			aria-label="Preview canvas"
+			bind:this={viewportElement}
+			onwheel={handleWheel}
+			onpointerdown={handlePointerDown}
+			onpointermove={handlePointerMove}
+			onpointerup={handlePointerEnd}
+			onpointercancel={handlePointerEnd}
+		>
+			<div class="preview-canvas__center">
+				<div class="preview-canvas__anchor">
+					<div
+						class="preview-canvas__content"
+						style={`width:${contentWidth}px;height:${contentHeight}px;left:${-contentWidth / 2}px;top:${-contentHeight / 2}px;transform: translate(${panX}px, ${panY}px) scale(${renderScale});`}
+					>
+						{@render children?.()}
+					</div>
+
+					<PreviewCanvasFooter
+						footerInfo={footerInfo}
+						anchorX={footerAnchorX}
+						anchorY={footerAnchorY}
+						renderScale={footerRenderScale}
+					/>
+				</div>
 			</div>
 		</div>
 	</div>
@@ -191,6 +286,7 @@
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+		margin-left: 1em;
 	}
 
 	.preview-canvas__zoom {
@@ -213,6 +309,13 @@
 		background: rgba(255, 255, 255, 0.08);
 	}
 
+	.preview-canvas__surface {
+		display: flex;
+		flex: 1 1 auto;
+		flex-direction: column;
+		min-height: 0;
+	}
+
 	.preview-canvas__viewport {
 		position: relative;
 		flex: 1 1 auto;
@@ -220,6 +323,8 @@
 		overflow: hidden;
 		touch-action: none;
 		cursor: grab;
+		user-select: none;
+		-webkit-user-select: none;
 	}
 
 	.preview-canvas__viewport:active {
@@ -227,16 +332,47 @@
 	}
 
 	.preview-canvas__center {
-		display: grid;
-		place-items: center;
+		position: relative;
 		width: 100%;
 		height: 100%;
 		padding: var(--space-6);
 	}
 
+	.preview-canvas__anchor {
+		position: absolute;
+		left: 50%;
+		top: 50%;
+		width: 0;
+		height: 0;
+	}
+
 	.preview-canvas__content {
-		position: relative;
+		position: absolute;
+		background: var(--color-bg-inset);
 		transform-origin: center center;
 		will-change: transform;
+		user-select: none;
+		-webkit-user-select: none;
+	}
+
+	.preview-canvas__content :global(*) {
+		user-select: none;
+		-webkit-user-select: none;
+	}
+
+	.preview-canvas__content::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		border: var(--border-width-outer) solid var(--color-border-strong);
+		box-shadow: inset 0 0 0 var(--border-width-inner) var(--color-border-soft);
+		pointer-events: none;
+	}
+
+	.preview-canvas__content :global(canvas),
+	.preview-canvas__content :global(img) {
+		display: block;
+		image-rendering: crisp-edges;
+		image-rendering: pixelated;
 	}
 </style>

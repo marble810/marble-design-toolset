@@ -553,13 +553,18 @@ RightPanel 负责承载预览区域。预览不要求一定是 `<canvas>`，它�
 
 - 棋盘格背景
 - 缩放百分比显示
+- 可选的 `defaultZoom` 初始模式
 - `Fit` 按钮
 - `1:1` 按钮
 - 放大 / 缩小按钮
 - 拖拽平移
 - 滚轮缩放
 
+其中，`1:1` 和缩放百分比的语义按“1 内容像素对应多少设备像素”解释，而不是直接暴露原始 CSS transform scale。这样做的目的是让 raster 预览在浏览器缩放或 DPI 变化时保持更稳定的 pixel-perfect 语义。
+
 因此，tool 只需要提供预览内容，不需要自行实现通用的视图操作栏。
+
+职责边界上，PreviewCanvas 只负责共享导航和 DPR 归一化缩放数学。它可以为 `canvas`、`img` 等 raster surface 提供 pixelated 呈现基线，但不会接管 renderer backing store 管理。对于需要自行控制渲染分辨率的 WebGL、Pixi 或其他 renderer 宿主，推荐继续使用 `FullStage`。
 
 ## 11. Tool 与总管的组合方式
 

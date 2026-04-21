@@ -457,13 +457,13 @@ npm run build
 
 | 模式 | 适用场景 | 提供的能力 |
 | --- | --- | --- |
-| `PreviewCanvas` | 固定尺寸的 2D 内容预览 | 缩放/适配/平移、棋盘格背景、工具栏 |
+| `PreviewCanvas` | 固定尺寸的 2D 内容预览 | 缩放/适配/平移、棋盘格背景、工具栏、DPR 归一化缩放语义 |
 | `FullStage` | WebGL、视频、全屏交互 | 全出血容器，工具自行管理全部交互 |
 | 自由内容 | 列表、表格、文档等 | 无框架预设，完全自定义 |
 
 ## 接入 PreviewCanvas
 
-`PreviewCanvas` 是 framework 提供的可选 2D 预览舞台。它内置了 Fit、1:1、缩放和平移功能。适用于有明确宽高的固定画布内容。
+`PreviewCanvas` 是 framework 提供的可选 2D 预览舞台。它内置了 Fit、1:1、缩放和平移功能。适用于有明确宽高的固定画布内容，尤其是 DOM 预览、图像预览和轻量 raster surface。
 
 基础用法：
 
@@ -484,13 +484,39 @@ npm run build
 | `contentWidth` | `number` | 逻辑内容宽度，单位 px |
 | `contentHeight` | `number` | 逻辑内容高度，单位 px |
 | `label` | `string` | 工具栏左侧的英文标签 |
+| `defaultZoom` | `'Fit' \| '1:1'` | 可选，定义预览首次打开时的默认缩放模式；默认 `Fit` |
 | `actions` | `Snippet` | 可选，在工具栏缩放控制后渲染额外控件 |
+| `footerInfo` | `PreviewCanvasFooterInfo` | 可选，在画布框外右下角渲染外置信息块（固定 20em） |
 
 约束：
 
 - 子内容默认占满 `100%` 宽高
 - 缩放、平移、Fit 和 1:1 交给 `PreviewCanvas`
+- `PreviewCanvas` 会以视口中心作为内容定位基线，即使内容尺寸大于可视区域也保持中心参考系
+- `1:1` 和工具栏缩放百分比按“1 内容像素 = 1 设备像素”解释，不等同于原始 CSS scale
+- 对 `canvas`、`img` 等 raster 内容，`PreviewCanvas` 会提供 pixelated 呈现基线
+- 预览外框由 `PreviewCanvas` 统一提供；除非明确需要嵌套画面，不要在子内容根元素再定义一层外边框
+- 预览内容区默认不可选中文本，防止拖拽平移和缩放过程中出现误选高亮；如确有需要请在 tool 内显式覆盖
+- 外置信息块（`footerInfo`）渲染在画布框外右下角，位置会随画布平移与缩放后的框体变化同步更新
+- 外置信息块固定宽度为 `20em`，单行溢出显示省略号，hover 时显示全文 tooltip
+- 外置信息块最多 5 行：首行仅支持 `IconOnly`、`IconAndTitle`、`TitleOnly`；其余行仅支持纯文本
+- 超限输入采用静默裁剪，不会抛出运行时错误或告警
 - 不要在子内容里再造一套预览工具栏
+
+如果你希望预览首次打开时直接进入设备像素归一化后的实际尺寸，可以显式传入 `defaultZoom="1:1"`：
+
+```svelte
+<PreviewCanvas
+  contentWidth={320}
+  contentHeight={320}
+  label="Sprite Preview"
+  defaultZoom="1:1"
+>
+  <img src={spriteUrl} alt="Sprite" />
+</PreviewCanvas>
+```
+
+如果工具需要自己控制 renderer backing store、WebGL viewport 或 Pixi / Three 的实际渲染分辨率，不要把这些职责塞进 `PreviewCanvas`。这种场景应继续使用 `FullStage`，由工具自己管理 `devicePixelRatio`、`setPixelRatio` 或其他 renderer 级逻辑。
 
 如果需要在工具栏中添加自定义控件（例如网格开关），使用 `actions` snippet：
 
@@ -501,6 +527,40 @@ npm run build
   {/snippet}
   <div class="my-preview"><!-- 内容 --></div>
 </PreviewCanvas>
+```
+
+如果需要在画布外右下角显示状态信息，优先使用 helper 构造 `footerInfo`：
+
+```svelte
+<script lang="ts">
+  import {
+    createPreviewCanvasFooterInfo,
+    footerBodyLine,
+    footerHeaderIconAndTitle,
+    PreviewCanvas,
+    RightPanel
+  } from '$lib/components/shell/index.js';
+
+  const footerInfo = createPreviewCanvasFooterInfo({
+    header: footerHeaderIconAndTitle('info-box', 'Preview Info'),
+    lines: [
+      footerBodyLine('Seed: 9812'),
+      footerBodyLine('Scale: 0.75'),
+      footerBodyLine('This line is intentionally long and will be truncated with ellipsis.')
+    ]
+  });
+</script>
+
+<RightPanel>
+  <PreviewCanvas
+    contentWidth={512}
+    contentHeight={512}
+    label="Noise Preview"
+    {footerInfo}
+  >
+    <div class="noise-preview"></div>
+  </PreviewCanvas>
+</RightPanel>
 ```
 
 ## 接入 FullStage

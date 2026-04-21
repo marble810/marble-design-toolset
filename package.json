@@ -7,7 +7,7 @@
 		"dev": "vite dev",
 		"build": "vite build",
 		"create:tool": "bun ./scripts/create-tool.js",
-		"test": "node --test src/lib/runtime/tool-availability.test.mjs scripts/tool-scaffold/scaffold.test.mjs",
+		"test": "node --test src/lib/runtime/tool-availability.test.mjs src/lib/components/shell/preview-canvas/zoom.test.mjs src/lib/components/shell/preview-canvas/footer-info.test.mjs scripts/tool-scaffold/scaffold.test.mjs",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''"
 	},
