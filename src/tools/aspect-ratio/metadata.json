@@ -1,7 +1,7 @@
 {
   "name": "Aspect Ratio Calculator",
-  "desc": "Calculate and visualize aspect ratios. Enter width or height to auto-calculate the other dimension.",
-  "tag": ["layout", "dimensions", "calculator"],
+  "desc": "Calculate and visualize aspect ratios, or import image and video files to seed frame dimensions.",
+  "tag": ["layout", "dimensions", "calculator", "media"],
   "version": "1.0.0",
   "enabled": true
 }

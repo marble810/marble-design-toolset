@@ -100,13 +100,15 @@
 
   let footerInfo = $derived.by(() =>
     createPreviewCanvasFooterInfo({
-      header: footerHeaderIconAndTitle('aspect-ratio', 'Frame Details'),
+      header: footerHeaderIconAndTitle("aspect-ratio", "Frame Details"),
       lines: [
         footerBodyLine(`Ratio: ${ratioLabel}`),
         footerBodyLine(`Size: ${widthPx} x ${heightPx}`),
-        footerBodyLine('This line is intentionally long to verify ellipsis and hover tooltip behavior.')
-      ]
-    })
+        footerBodyLine(
+          "This line is intentionally long to verify ellipsis and hover tooltip behavior.",
+        ),
+      ],
+    }),
   );
 </script>
 
@@ -184,19 +186,28 @@
   <PreviewCanvas
     contentHeight={heightPx}
     contentWidth={widthPx}
-	defaultZoom="1:1"
+    defaultZoom="1:1"
     label={`Aspect Ratio: ${ratioLabel}`}
     footerInfo={footerInfo as any}
   >
     <div class="Canvas-Title">
-		<p>ASPECT RATIO CALCULATOR</p>
-	</div>
+      <p>ASPECT RATIO CALCULATOR</p>
+    </div>
   </PreviewCanvas>
 </RightPanel>
 
 <style>
   .Canvas-Title {
-	position: relative;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: var(--color-fg-muted);
+    font-size: var(--font-size-3);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    pointer-events: none;
+    overflow: hidden;
   }
 
   .aspect-ratio-tool__custom-fields {

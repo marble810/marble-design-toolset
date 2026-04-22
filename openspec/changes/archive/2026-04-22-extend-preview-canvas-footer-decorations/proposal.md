@@ -26,5 +26,5 @@
 - Affected component: src/lib/components/shell/preview-canvas/PreviewCanvas.svelte
 - Potentially affected types/exports: src/lib/components/shell/preview-canvas/index.ts 与相关 helper/类型定义
 - Affected specs: openspec/specs/right-panel-modes/spec.md, openspec/specs/tool-shell-workspace/spec.md
-- Affected docs: docs/tool-authoring-guide.md（需要新增装饰区使用说明）
+- Affected docs: docs/guides/Making Tools/tool-authoring-guide.md（需要新增装饰区使用说明）
 - Existing tools remain backward compatible when not using the new decoration capability

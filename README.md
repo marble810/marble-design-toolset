@@ -1,12 +1,12 @@
 # Marble Design Toolset
 
-Marble Design Toolset 是一个基于 SvelteKit 的 Pixel Tool Framework，用来承载多个横屏设计工具。当前框架已经提供统一的 workspace shell、tool runtime、共享 UI 包装层以及按需 tech stack 加载机制。
+Marble Design Toolset 是一个基于 SvelteKit 的多工具设计工作区，用来承载多个横屏设计工具。当前工作区已经提供统一的 workspace shell、tool runtime、共享 UI 包装层以及按需 tech stack 加载机制。
 
 ## 文档入口
 
-- 架构设计：`docs/pixel-tool-framework-architecture.md`
-- Tool 开发指南：`docs/tool-authoring-guide.md`
-- OpenSpec 变更：`openspec/changes/establish-pixel-tool-framework/`
+- 架构设计：`docs/architecture/project-architecture-analysis.md`
+- Tool 开发指南：`docs/guides/Making Tools/tool-authoring-guide.md`
+- OpenSpec 变更：`openspec/changes/`
 
 ## 开发命令
 
@@ -41,4 +41,4 @@ bun run create:tool
 - tool 必须遵循 `src/tools/<tool-id>/metadata.json + index.ts + 单一 master .svelte + components/` 的目录 schema
 - heavy tech stack 通过共享 runtime 声明并加载，目前支持 `three`、`pixi`、`gsap`
 
-如果要新增 tool，先运行 `bun run create:tool`，再结合 `docs/tool-authoring-guide.md` 完成后续开发。
+如果要新增 tool，先运行 `bun run create:tool`，再结合 `docs/guides/Making Tools/tool-authoring-guide.md` 完成后续开发。

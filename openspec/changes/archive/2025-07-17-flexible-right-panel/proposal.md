@@ -23,6 +23,6 @@
 - **组件**：`src/lib/components/shell/right-panel/RightPanel.svelte`、`src/lib/components/shell/preview-canvas/PreviewCanvas.svelte`、新增 `src/lib/components/shell/full-stage/FullStage.svelte` + `index.ts`
 - **壳层导出**：`src/lib/components/shell/index.ts` 需重导出 `FullStage`
 - **工具**：全部 3 个现有工具的 master 组件需要迁移编辑
-- **文档**：`docs/tool-authoring-guide.md`、`docs/pixel-tool-framework-architecture.md`
+- **文档**：`docs/guides/Making Tools/tool-authoring-guide.md`、`docs/architecture/project-architecture-analysis.md`
 - **规格**：`openspec/specs/tool-shell-workspace/spec.md` 需求更新
 - **无新依赖**；壳层组件层以外无 API 变更

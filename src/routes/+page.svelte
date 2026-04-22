@@ -1,12 +1,9 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
-	import type { Component } from 'svelte';
-	import { ToolShell } from '$lib/components/shell/index.js';
 	import { Button, Dialog, PixelIcon, Tabs } from '$lib/components/ui/index.js';
+	import ToolSession from '$lib/components/shell/tool-session/ToolSession.svelte';
 	import type { TabItem } from '$lib/components/ui/tabs/index.js';
-	import { setToolShellContext, type ToolShellContextValue } from '$lib/runtime/tool-shell-context';
-	import { loadTechStacks } from '$lib/runtime/tech-stack';
-	import { getToolCatalog, isValidToolId, loadToolDefinition } from '$lib/runtime/tool-registry';
+	import { getToolCatalog, isValidToolId } from '$lib/runtime/tool-registry';
 	import {
 		DEFAULT_LEFT_PANEL_WIDTH_VW,
 		MAX_LEFT_PANEL_WIDTH_VW,
@@ -17,41 +14,17 @@
 		resolveInitialWorkspaceState,
 		writeHashToolId
 	} from '$lib/runtime/workspace-state';
-	import type { ToolDefinition } from '$lib/types/tool';
 
 	const toolCatalog = getToolCatalog();
 	const validToolIds = toolCatalog.map((tool) => tool.id);
-	const EMPTY_TOOL_METADATA = {
-		name: '',
-		desc: '',
-		tag: [],
-		version: ''
-	};
 
 	let openDialogOpen = $state(false);
 	let helpDialogOpen = $state(false);
 	let settingsDialogOpen = $state(false);
-	let aboutDialogOpen = $state(false);
 	let openToolIds = $state<string[]>([]);
 	let activeToolId = $state('');
 	let leftPanelWidthVw = $state(DEFAULT_LEFT_PANEL_WIDTH_VW);
 	let isHydrated = $state(false);
-	let isLoading = $state(false);
-	let loadError = $state('');
-	let activeDefinition = $state<ToolDefinition | null>(null);
-	let ActiveComponent = $state<Component<any> | null>(null);
-	let toolLoadVersion = 0;
-
-	const toolShellContext = $state<ToolShellContextValue>({
-		metadata: EMPTY_TOOL_METADATA,
-		menuActions: [],
-		openAbout: () => {
-			aboutDialogOpen = true;
-		},
-		onMenuAction: () => {}
-	});
-
-	setToolShellContext(toolShellContext);
 
 	let openTabs = $derived.by<TabItem[]>(() =>
 		openToolIds.flatMap((toolId) => {
@@ -137,58 +110,6 @@
 		window.addEventListener('hashchange', handleHashChange);
 		return () => window.removeEventListener('hashchange', handleHashChange);
 	});
-
-	$effect(() => {
-		const definition = activeDefinition;
-		toolShellContext.metadata = definition?.metadata ?? EMPTY_TOOL_METADATA;
-		toolShellContext.menuActions = definition?.menuActions ?? [];
-		toolShellContext.openAbout = () => {
-			aboutDialogOpen = true;
-		};
-		toolShellContext.onMenuAction = () => {};
-	});
-
-	$effect(() => {
-		const nextToolId = activeToolId;
-		loadError = '';
-
-		if (!nextToolId) {
-			activeDefinition = null;
-			ActiveComponent = null;
-			isLoading = false;
-			return;
-		}
-
-		const currentLoad = ++toolLoadVersion;
-		isLoading = true;
-		activeDefinition = null;
-		ActiveComponent = null;
-
-		void (async () => {
-			try {
-				const definition = await loadToolDefinition(nextToolId);
-				await loadTechStacks(definition.techStack);
-				const componentModule = await definition.loadComponent();
-
-				if (currentLoad !== toolLoadVersion) {
-					return;
-				}
-
-				activeDefinition = definition;
-				ActiveComponent = componentModule.default;
-			} catch (error) {
-				if (currentLoad !== toolLoadVersion) {
-					return;
-				}
-
-				loadError = error instanceof Error ? error.message : 'Failed to load the selected tool.';
-			} finally {
-				if (currentLoad === toolLoadVersion) {
-					isLoading = false;
-				}
-			}
-		})();
-	});
 </script>
 
 <div class="workspace">
@@ -228,23 +149,12 @@
 	</section>
 
 	<main class="workspace__content">
-		{#if isLoading}
-			<div class="workspace__status">
-				<p class="workspace__status-title">Loading tool...</p>
-				<p class="workspace__status-copy">Preparing runtime definition and declared tech stack.</p>
+		{#if openToolIds.length > 0}
+			<div class="workspace__session-stack">
+				{#each openToolIds as toolId (toolId)}
+					<ToolSession toolId={toolId} isActive={activeToolId === toolId} {leftPanelWidthVw} />
+				{/each}
 			</div>
-		{:else if loadError}
-			<div class="workspace__status">
-				<p class="workspace__status-title">Tool failed to load</p>
-				<p class="workspace__status-copy">{loadError}</p>
-				<Button variant="outline" size="sm" onclick={() => activeToolId && activateTool(activeToolId)}>
-					Retry
-				</Button>
-			</div>
-		{:else if ActiveComponent}
-			<ToolShell {leftPanelWidthVw}>
-				<ActiveComponent />
-			</ToolShell>
 		{:else}
 			<div class="workspace__empty-state">
 				<div class="workspace__empty-icon">
@@ -299,6 +209,7 @@
 <Dialog bind:open={helpDialogOpen} title="Help" description="Current workspace behavior and constraints." width="md">
 	<div class="dialog-copy">
 		<p>The workspace uses a framework-owned shell with hash-based tool routing and local tab persistence.</p>
+		<p>Open tabs keep their in-memory state while you switch between them, and they are only destroyed when you close the tab.</p>
 		<p>Tools only render left panel controls and right panel preview content. The shell owns tabs, dialogs, settings, and preview navigation.</p>
 		<p>The UI is currently English-only and requires a minimum width of 720px.</p>
 	</div>
@@ -340,35 +251,6 @@
 		/>
 	</div>
 </Dialog>
-
-<Dialog
-	bind:open={aboutDialogOpen}
-	title={activeDefinition?.metadata.name ?? 'About'}
-	description="Metadata supplied by the active tool definition."
-	width="sm"
->
-	{#if activeDefinition}
-		<div class="about-panel">
-			<div class="about-panel__row">
-				<span class="about-panel__label">Version</span>
-				<strong>{activeDefinition.metadata.version}</strong>
-			</div>
-			<div class="about-panel__row about-panel__row--stacked">
-				<span class="about-panel__label">Description</span>
-				<p>{activeDefinition.metadata.desc}</p>
-			</div>
-			<div class="about-panel__row about-panel__row--stacked">
-				<span class="about-panel__label">Tags</span>
-				<div class="about-panel__tags">
-					{#each activeDefinition.metadata.tag as tag}
-						<span class="pixel-chip">{tag}</span>
-					{/each}
-				</div>
-			</div>
-		</div>
-	{/if}
-</Dialog>
-
 <style>
 	.workspace {
 		display: grid;
@@ -437,7 +319,11 @@
 		padding: var(--space-3);
 	}
 
-	.workspace__status,
+	.workspace__session-stack {
+		height: 100%;
+		min-height: 0;
+	}
+
 	.workspace__empty-state {
 		display: grid;
 		place-items: center;
@@ -446,18 +332,12 @@
 		text-align: center;
 	}
 
-	.workspace__status {
-		gap: var(--space-3);
-	}
-
-	.workspace__status-title,
 	.workspace__empty-title {
 		margin: 0;
 		font-size: 24px;
 		line-height: 1.1;
 	}
 
-	.workspace__status-copy,
 	.workspace__empty-copy {
 		margin: 0;
 		max-width: 520px;
@@ -546,7 +426,6 @@
 	}
 
 	.dialog-copy,
-	.about-panel,
 	.settings-panel {
 		display: flex;
 		flex-direction: column;
@@ -554,27 +433,19 @@
 	}
 
 	.dialog-copy p,
-	.about-panel p,
 	.settings-panel p {
 		margin: 0;
 		color: var(--color-fg-secondary);
 	}
 
-	.settings-panel__row,
-	.about-panel__row {
+	.settings-panel__row {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		gap: var(--space-4);
 	}
 
-	.about-panel__row--stacked {
-		flex-direction: column;
-		align-items: flex-start;
-	}
-
-	.settings-panel__label,
-	.about-panel__label {
+	.settings-panel__label {
 		color: var(--color-fg-secondary);
 		font-size: var(--font-size-1);
 		text-transform: uppercase;
@@ -592,11 +463,5 @@
 
 	.settings-panel__range {
 		width: 100%;
-	}
-
-	.about-panel__tags {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--space-2);
 	}
 </style>

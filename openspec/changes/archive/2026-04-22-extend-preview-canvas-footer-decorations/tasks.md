@@ -21,5 +21,5 @@
 
 - [x] 4.1 为 helper 输入模型与静默裁剪逻辑补充单元测试（边界值与异常输入）
 - [x] 4.2 为“画布外右下定位”“20em 固定宽度”“省略号 + tooltip”补充组件行为验证
-- [x] 4.3 更新 docs/tool-authoring-guide.md，新增外置信息块使用示例与约束说明
+- [x] 4.3 更新 docs/guides/Making Tools/tool-authoring-guide.md，新增外置信息块使用示例与约束说明
 - [x] 4.4 运行 npm test 与 npm run build，确保变更可通过现有质量门禁

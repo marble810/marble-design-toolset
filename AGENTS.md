@@ -1,6 +1,6 @@
 # AGENTS
 
-只保留必须严格遵守的框架级约束；更完整背景见 docs/pixel-tool-framework-architecture.md 与 openspec/changes/establish-pixel-tool-framework/。
+只保留必须严格遵守的框架级约束；更完整背景见 docs/architecture/project-architecture-analysis.md 与 openspec/specs/。
 
 ## Hard Constraints
 - 样式基础层不得继续使用 Tailwind；统一使用 CSS Custom Properties 和 px 单位。
@@ -13,5 +13,6 @@
 - `tool-id` 使用 kebab-case；master 组件文件名使用与 `tool-id` 对应的 PascalCase；工具根目录只允许一个 root-level `.svelte`。
 - `metadata.json` 只放静态元数据；`index.ts` 负责 runtime definition；tool 组件按需懒加载。
 - 可选技术栈只声明并通过共享 runtime 加载 `three`、`pixi`、`gsap`；不要在无声明前提下直接把重型依赖耦合进通用壳层。
+- tool 如果要导入本地图像、影片或文字文件，优先复用共享 `src/lib/runtime/file-input/` 管道；不要各自重复实现类型判定、读取、drop 解析与对象 URL 清理。
 - OpenSpec 文档（proposal、design、specs、tasks 等 artifact）统一使用中文撰写。
 - docs/ 目录下的开发者文档统一使用中文撰写。

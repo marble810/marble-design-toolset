@@ -1,14 +1,14 @@
 {
   "name": "Noise Texture Creater",
-  "desc": "Preview starter scaffold for the Noise Texture Creater tool.",
+  "desc": "Generate square Perlin and Voronoi textures with a Pixi preview and PNG export.",
   "tag": [
-    "Texture",
-    "Procedual"
+    "noise",
+    "texture",
+    "pixi"
   ],
   "version": "1.0.0",
   "enabled": true,
   "export": {
-    "image": true,
-    "video": true
+    "image": true
   }
 }

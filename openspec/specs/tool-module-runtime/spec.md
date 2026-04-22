@@ -1,7 +1,7 @@
 # tool-module-runtime Specification
 
 ## Purpose
-TBD - created by archiving change establish-pixel-tool-framework. Update Purpose after archive.
+定义 Marble Design Toolset 的工具模块运行时约束，包括目录 schema、metadata 合约、定义发现方式与懒加载边界。
 ## Requirements
 ### Requirement: 每个工具遵循严格的文件系统 schema
 每个工具 SHALL 位于 `src/tools/<tool-id>/` 之下，并且 SHALL 提供 `index.ts`、`metadata.json` 以及一个文件名与工具标识 PascalCase 形式严格对应的 master Svelte 入口组件。该工具的其他 Svelte 文件 SHALL 位于 `components/` 目录中。

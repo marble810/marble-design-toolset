@@ -2,13 +2,14 @@
 
 ## 开始之前
 
-这份指南告诉你如何在当前 Pixel Tool Framework 中从零创建一个 tool，让它自动出现在 workspace 的 Open Tool 列表里，并与现有的 shell、路由和 tech stack 加载机制无缝衔接。
+这份指南告诉你如何在当前 Marble Design Toolset（mdt.）中从零创建一个 tool，让它自动出现在 workspace 的 Open Tool 列表里，并与现有的 shell、路由和 tech stack 加载机制无缝衔接。
 
 读完后你应该能：
 
 - 建立正确的目录结构
 - 写出满足运行时合约的 `metadata.json` 和 `index.ts`
 - 把自己的 UI 挂进 `LeftPanel` 和 `PreviewCanvas`
+- 在需要导入本地图像、影片或文字时复用统一文件输入 runtime
 - 在需要时声明 Three.js、Pixi.js 或 GSAP 并安全使用
 - 明确知道哪些事情不能做
 
@@ -19,6 +20,7 @@
 | `src/lib/types/tool.ts` | `ToolDefinition`、`ToolMetadata` 等核心类型 |
 | `src/lib/runtime/tool-registry.ts` | catalog 发现与 definition 懒加载逻辑 |
 | `src/lib/runtime/tech-stack.ts` | heavy tech stack 加载器与缓存 |
+| `src/lib/runtime/file-input/` | 统一文件输入控制器、drop helper 与标准化读取逻辑 |
 | `src/routes/+page.svelte` | 顶层 tool 装载流程 |
 | `src/lib/components/shell/index.ts` | shell 组件统一导出 |
 | `src/tools/hello-world/` | 最简 tool 示例 |
@@ -620,6 +622,20 @@ const THREE = await loadTechStack('three');
 
 loader 内部带缓存，因此顶层预加载和组件内调用都是安全的。不要直接把 heavy dependency 接进共享 shell 层，也不要绕过 loader 另起一套缓存。
 
+## 使用统一文件输入管道
+
+如果 tool 需要导入本地图像、影片或文字文件，默认入口是 `src/lib/runtime/file-input/`，不要在工具内部重复造一套文件选择、类型判定、文本读取、拖放解析和对象 URL 清理逻辑。
+
+统一管道的基本约束：
+
+- 由 `createFileInputController({ allowedKinds })` 创建控制器
+- picker 与 drop 都必须走同一个 `ingestFiles(...)` 入口
+- 隐藏文件输入元素的 `accept` 使用控制器暴露的 `accept`
+- 图像 / 影片对象 URL 的生命周期由 runtime 持有，tool 只消费 `currentItem`
+- 导入失败时保留最近一次成功结果，不要自己手动清空
+
+完整用法见 `docs/guides/Making Tools/tool-file-input-guide.md`。当工具涉及本地文件导入时，应先读那份指南再设计交互。
+
 ## Bits UI 约束
 
 交互型基础组件默认优先使用共享包装。只有在共享 UI 层还没有对应组件，或者该交互非常 tool-specific 时，才建议在私有组件里直接使用 Bits UI。
@@ -716,6 +732,7 @@ loader 内部带缓存，因此顶层预加载和组件内调用都是安全的�
 - 在 `metadata.json` 中放 runtime 逻辑，例如 `techStack`、`loadComponent`、组件路径
 - 在工具根目录放多个 `.svelte`
 - 未在 `index.ts` 声明 `techStack` 就直接使用 `three`、`pixi` 或 `gsap`
+- 对本地图像、影片或文字输入自行实现第二套 picker / drop / 对象 URL 管理逻辑
 - 使用 Tailwind utility class 或重新引入 Tailwind 依赖
 - 使用 rem-based 自适应体系替代当前 px + CSS Custom Properties 体系
 - 在共享 UI 文案中写中文
@@ -818,6 +835,7 @@ import * as THREE from 'three';
 - [ ] `loadComponent` 使用懒加载，而不是顶部 import
 - [ ] 若使用 `three`、`pixi` 或 `gsap`，已在 `index.ts` 声明 `techStack`
 - [ ] heavy dependency 通过 `loadTechStack` 获取，没有直接接进共享 shell
+- [ ] 若工具需要本地图像、影片或文字输入，已通过 `src/lib/runtime/file-input/` 接入而不是自写浏览器文件管道
 - [ ] master `.svelte` 没有重复写 workspace shell
 - [ ] `LeftPanel` 中没有重写 `MainInfo`
 - [ ] 右侧预览接入了 `PreviewCanvas`

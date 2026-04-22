@@ -1,7 +1,7 @@
 # tool-shell-workspace Specification
 
 ## Purpose
-TBD - created by archiving change establish-pixel-tool-framework. Update Purpose after archive.
+定义 Marble Design Toolset 工作区壳层的顶层布局、导航入口、标签页管理、左右分栏职责与预览舞台基线。
 ## Requirements
 ### Requirement: 工作区提供持久化壳层 Header
 应用 SHALL 渲染一个共享工作区 Header，其中包含应用标题，以及用于打开工具、访问帮助、打开文档和打开设置的顶层操作入口。Docs 入口 SHALL 以新标签页打开独立文档浏览页面，而不替换当前工作区页面。

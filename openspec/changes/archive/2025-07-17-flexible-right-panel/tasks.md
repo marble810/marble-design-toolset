@@ -26,8 +26,8 @@
 
 ## 5. 文档更新
 
-- [x] 5.1 更新 `docs/tool-authoring-guide.md`：将 PreviewCanvas 说明为可选项，介绍 FullStage 用法，更新模板示例
-- [x] 5.2 更新 `docs/pixel-tool-framework-architecture.md`：更新 RightPanel/PreviewCanvas 描述，添加 FullStage 到组件层次结构
+- [x] 5.1 更新 `docs/guides/Making Tools/tool-authoring-guide.md`：将 PreviewCanvas 说明为可选项，介绍 FullStage 用法，更新模板示例
+- [x] 5.2 更新 `docs/architecture/project-architecture-analysis.md`：更新 RightPanel/PreviewCanvas 描述，添加 FullStage 到组件层次结构
 - [x] 5.3 更新框架架构 Mermaid 图，将 FullStage 显示为 PreviewCanvas 的同级节点
 
 ## 6. 验证

@@ -1,7 +1,7 @@
 # pixel-ui-foundation Specification
 
 ## Purpose
-TBD - created by archiving change establish-pixel-tool-framework. Update Purpose after archive.
+定义 Marble Design Toolset 的共享像素 UI 基础层约束，包括设计令牌、Bits UI 包装规则、布局组件职责与视口基线。
 ## Requirements
 ### Requirement: 共享像素设计令牌
 工作区 SHALL 在全局 CSS Custom Properties 中定义共享设计令牌基础，覆盖颜色、间距、排版、边框、动效和分层表面。工作区壳层使用的共享间距与排版令牌 SHALL 使用基于像素的单位。

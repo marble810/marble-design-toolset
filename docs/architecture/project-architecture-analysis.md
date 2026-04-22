@@ -9,6 +9,7 @@ Marble Design Toolset 是一个静态托管的 SvelteKit 应用，用于承载�
 - 一个由框架完全拥有的 workspace shell（顶部条 + 标签栏 + 左右分栏 + 持久化）。
 - 一套基于 Bits UI + 手写布局组件的像素风 UI 基础层。
 - 一个工具运行时：metadata 即时发现 + 运行时定义按需懒加载 + heavy tech stack（`three` / `pixi` / `gsap`）共享缓存加载。
+- 一个面向 tool 直接导入的统一文件输入运行时，覆盖图像、影片与文字文件的标准化 ingest。
 - 一个基于 mdsvex 的仓库内文档浏览器（构建期遍历 `docs/**/*.md`）。
 - 一个生成新工具骨架的交互式脚手架（`bun run create:tool`）。
 
@@ -40,7 +41,7 @@ src/
 │   │   ├── shell/             # 框架级布局组件（手写）
 │   │   └── ui/                # 交互原子组件（基于 bits-ui 的包装层）
 │   ├── docs/                  # mdsvex 文档浏览器的 catalog/runtime 工具
-│   ├── runtime/               # 工具注册表、tech-stack registry、工作区状态
+│   ├── runtime/               # 工具注册表、tech-stack registry、工作区状态、文件输入等共享 runtime
 │   └── types/                 # 公共 TS 类型（tool / tech-stack）
 ├── routes/
 │   ├── +layout.{svelte,js}    # 注入全局 CSS、声明 prerender
@@ -200,6 +201,27 @@ const loaders = {
 
 > **路线图预留**：`fast-png` 仅覆盖 16-bit PNG。未来会通过独立的 OpenSpec change（候选名 `add-canvas-export-ffmpeg`）以同样的懒加载 + capability 模式接入 `@ffmpeg/ffmpeg`，覆盖高位深视频、ProRes、APNG / GIF、容器互转。该路径强制 host 提供 COOP/COEP headers，并独立承载 docs 章节。
 
+### 8.8 Unified File Input Runtime
+
+[src/lib/runtime/file-input/](src/lib/runtime/file-input/) 是 framework-owned 的统一文件输入模块，但它不像 `tool-shell-context` 或 `canvas-export context` 那样挂到壳层顶层；它面向 tool 直接 import，用于统一本地图像、影片和文字文件的 ingest 行为。
+
+当前结构：
+
+- `helpers.ts`：纯函数层，负责 `accept` 派生、文件 kind 判定、单文件约束验证以及 drop 文件抽取。
+- `readers.ts`：浏览器文件读取层，负责把 image / video / text 标准化为 discriminated union 结果，并集中处理对象 URL 与媒体元信息读取。
+- `controller-core.ts` + `controller.svelte.ts`：同一套控制器逻辑的纯实现和响应式包装层，对外暴露 `createFileInputController(...)`。
+- `index.ts`：统一 runtime 入口，重导出控制器、helper、reader 和共享类型。
+
+控制器 contract：
+
+- 输入配置由 `allowedKinds` 指定，运行时派生 `accept`，供隐藏文件输入元素复用。
+- picker 和 drop 都必须走同一个 `ingestFiles(files, source)` 入口，避免两套错误语义。
+- 成功导入输出 `ImportedFileItem` 判别联合：image / video 提供 `objectUrl` 与元信息，text 提供解码后的 `text`。
+- 导入失败只更新 `lastError`，不会清空最近一次成功的 `currentItem`。
+- `clear()`、`dispose()` 和新的成功结果替换旧结果时，runtime 负责回收旧的媒体对象 URL。
+
+这个模块故意不提供 framework-owned 的上传面板或统一 drop zone。输入 UI 仍由 tool 自己决定，但底层文件 API、对象 URL 生命周期和错误契约必须收敛到共享 runtime。
+
 ## 9. Tool 模块契约
 
 来自 [openspec/specs/tool-module-runtime/spec.md](openspec/specs/tool-module-runtime/spec.md) 与 AGENTS.md 的硬约束：
@@ -289,6 +311,7 @@ flowchart LR
 - [src/lib/runtime/tech-stack.test.ts](src/lib/runtime/tech-stack.test.ts)
 - [src/lib/components/shell/preview-canvas/zoom.test.mjs](src/lib/components/shell/preview-canvas/zoom.test.mjs)
 - [src/lib/components/shell/preview-canvas/footer-info.test.mjs](src/lib/components/shell/preview-canvas/footer-info.test.mjs)
+- [src/lib/runtime/file-input/file-input.test.ts](src/lib/runtime/file-input/file-input.test.ts)
 - [scripts/tool-scaffold/scaffold.test.mjs](scripts/tool-scaffold/scaffold.test.mjs)
 
 `npm run build` 是事实上的"全量集成校验"，会触发：metadata 全量发现、所有工具 `index.ts` 与 master `.svelte` 的类型/编译检查、docs 浏览器静态化、adapter-static 输出。
@@ -319,11 +342,12 @@ flowchart LR
 - 工具不可重定义顶层 workspace shell；只能渲染左侧片段与右侧内容。
 - 工具目录 schema 严格遵守，`tool-id` 与 PascalCase master 文件名一一对应；`metadata.json` 只放静态元数据。
 - heavy 依赖（`three` / `pixi` / `gsap`）必须经共享 registry 声明 + 加载，禁止直接耦合到通用壳层。
+- 本地图像 / 影片 / 文字输入应优先复用共享 `file-input` runtime，而不是在各 tool 内重复实现 browser file pipeline。
 - OpenSpec artifact 与 `docs/` 下的开发者文档统一中文撰写。
 
 ## 17. 二次开发建议路径
 
-1. **加新工具**：`bun run create:tool` → 在生成的 master `.svelte` 内组合 `LeftPanel + Section + (PreviewCanvas | FullStage | 自由内容)` → `npm run build` 校验 → 需要时把 `metadata.enabled` 临时设为 `false` 隐藏未完成工具。
+1. **加新工具**：`bun run create:tool` → 在生成的 master `.svelte` 内组合 `LeftPanel + Section + (PreviewCanvas | FullStage | 自由内容)` → 如果需要本地图像 / 影片 / 文字输入则接入 `src/lib/runtime/file-input/` → `npm run build` 校验 → 需要时把 `metadata.enabled` 临时设为 `false` 隐藏未完成工具。
 2. **加新共享 UI 原子**：放进 `src/lib/components/ui/<name>/`，必须基于 Bits UI；从 `index.ts` 重新导出；如果是布局型，则归入 `src/lib/components/shell/` 并手写。
 3. **接入新 heavy 依赖**：在 [src/lib/runtime/tech-stack.ts](src/lib/runtime/tech-stack.ts) 的 `loaders` 中追加 key，并扩展 [src/lib/types/tech-stack.ts](src/lib/types/tech-stack.ts) 的 `TechStackModuleMap`；走 OpenSpec 流程更新规格。
 4. **加新文档**：直接在 `docs/<group>/<name>.md` 中创建（保持中文 + 顶部 `# Title`），文档浏览器构建期自动收录；注意裸 `<` 须转义。

@@ -22,6 +22,6 @@ PreviewCanvas currently treats Fit, 1:1, and the displayed zoom percentage as di
 
 - Affected component: `src/lib/components/shell/preview-canvas/PreviewCanvas.svelte`
 - Affected specs: `openspec/specs/right-panel-modes/spec.md`, `openspec/specs/tool-shell-workspace/spec.md`
-- Affected documentation: `docs/tool-authoring-guide.md`, `docs/pixel-tool-framework-architecture.md`
+- Affected documentation: `docs/guides/Making Tools/tool-authoring-guide.md`, `docs/architecture/project-architecture-analysis.md`
 - Existing PreviewCanvas consumers may optionally pass `defaultZoom`, but the default behavior remains `Fit`
 - No new runtime dependencies and no new right-panel container types

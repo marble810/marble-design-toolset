@@ -7,18 +7,18 @@ test('buildDocsCatalog keeps directory groups and derives titles from headings',
 	const catalog = buildDocsCatalog(
 		[
 			'/docs/guides/tool-authoring-guide.md',
-			'/docs/architecture/pixel-tool-framework-architecture.md',
+			'/docs/architecture/project-architecture-analysis.md',
 			'/docs/guides/renderers/tool-pixi-guide.md'
 		],
 		{
 			'/docs/guides/tool-authoring-guide.md': '# Tool Authoring Guide\n',
-			'/docs/architecture/pixel-tool-framework-architecture.md': '# Framework Architecture\n',
+			'/docs/architecture/project-architecture-analysis.md': '# Project Architecture Analysis\n',
 			'/docs/guides/renderers/tool-pixi-guide.md': '# Pixi Renderer Guide\n'
 		}
 	);
 
 	assert.deepStrictEqual(catalog.entries.map((entry) => entry.slug), [
-		'architecture/pixel-tool-framework-architecture',
+		'architecture/project-architecture-analysis',
 		'guides/renderers/tool-pixi-guide',
 		'guides/tool-authoring-guide'
 	]);
@@ -27,7 +27,7 @@ test('buildDocsCatalog keeps directory groups and derives titles from headings',
 	assert.equal(catalog.tree.groups[1]?.docs[0]?.title, 'Tool Authoring Guide');
 	assert.equal(catalog.tree.groups[1]?.groups[0]?.docs[0]?.title, 'Pixi Renderer Guide');
 	assert.deepStrictEqual(listDocRouteEntries(catalog.entries), [
-		{ slug: 'architecture/pixel-tool-framework-architecture' },
+		{ slug: 'architecture/project-architecture-analysis' },
 		{ slug: 'guides/renderers/tool-pixi-guide' },
 		{ slug: 'guides/tool-authoring-guide' }
 	]);
