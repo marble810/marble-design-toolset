@@ -1,6 +1,14 @@
 <script lang="ts">
 	import { loadTechStack } from '$lib/runtime/tech-stack';
+    import type { TechStackModule } from '$lib/types/tech-stack';
 	import { onMount } from 'svelte';
+    import type { Application } from 'pixi.js';
+
+    type PixiModule = TechStackModule<'pixi'>;
+    type VoronoiController = {
+        renderer: Application['renderer'];
+        updateNoiseScale: (nextNoiseScale: number) => void;
+    };
 
     interface Props {
         width: number;
@@ -14,7 +22,7 @@
     let isReady = $state(false);
     let errorMessage = $state('');
 
-    let voronoi:any = null;
+    let voronoi: VoronoiController | null = null;
 
     $effect(()=>{
         if (isReady && voronoi) {
@@ -37,8 +45,9 @@
 
     void (async()=>{
         try{
-            const PIXI = (await loadTechStack('pixi')) as typeof import('pixi.js');
+            const PIXI: PixiModule = await loadTechStack('pixi');
             if (disposed || !hostElement) return;
+            void PIXI;
         } catch(e){
             errorMessage = 'Failed to load Pixi.js library.';
             console.error(e);

@@ -1,27 +1,41 @@
-# 在 Marble Design Toolset 中创建基于 Three.js 的 Tool
+# Making Tools with Three.js
 
-本指南将带你从零开始，在 **Marble Design Toolset** 中创建一个基于 **Three.js** 的 3D 模型预览/编辑工具。我们将学习如何配置参数区、如何使用 `FullStage` 作为 3D 渲染器的无边距宿主、如何绑定渲染循环与调整参数，以及最终实现设置传递和实时预览效果同步更新。
+本指南带你在 **Marble Design Toolset** 里从零搭建一个基于 **Three.js** 的 3D 模型预览工具。读完后你能：
+
+- 在 `LeftPanel` 中组织参数区
+- 用 `FullStage` 提供无边距 WebGL 宿主
+- 绑定渲染循环与参数调整
+- 获取框架预热好的 `THREE` 模块并责任制释放 WebGL 资源
+
+## TL;DR
+
+1. `bun run create:tool` → 选 `stage` starter + `three` tech stack。
+2. 在 master `.svelte` 里用 `LeftPanel` + `<RightPanel><FullStage>...</FullStage></RightPanel>` 组合；把 Three 子组件挂在 `FullStage` 内。
+3. 在 Three 子组件 `onMount` 中 `await loadTechStack('three')`，创建 Scene/Camera/Renderer，把 `renderer.domElement` 挂进 host。
+4. 用 `ResizeObserver` 同步画布尺寸，`requestAnimationFrame` 推动渲染循环，`$effect` 以参数变化驱动 material/light/camera 状态。
+5. cleanup 中依次调用所有 `dispose()`，护住 WebGL Context 不泄露。
 
 ## 适用场景
 
-Three.js 非常适合构建 3D 场景查看器、材质编辑器、网格生成器等工具。在本框架中，3D 工具通常希望占据整个右侧舞台、不被 `PreviewCanvas` 的 2D 比例限制（而是自适应面板剩余宽高）。这就必须用 `FullStage` 容器来包裹。
+Three.js 适合 3D 场景查看器、材质编辑器、网格生成器等工具。在本框架中，3D 工具需要占据整个右侧舞台并自适应面板剩余宽高，不被 `PreviewCanvas` 的固定宽高限制，因此必须用 `FullStage` 容器。
 
 ---
 
 ## 1. 使用脚手架初始化目录
 
-最好从脚手架开始创建我们的基础骨架。
+使用脚手架生成基础骨架：
 
 ```bash
 bun run create:tool
 ```
 
 交互过程：
-- **Tool Name**: `Model Viewer` (自动转成 `model-viewer`)
-- **Starter Type**: `stage` (我们需要 WebGL 的全出血视口自适应，而不是固定长宽的画板)
-- **Tech Stacks**: `three` (框架提供全局的三方包并加载之)
 
-此时，你会在 `src/tools/model-viewer/` 下得到预置内容。主文件为 `ModelViewer.svelte`，配套渲染器子组件可能叫 `StageViewport.svelte`，在 `index.ts` 里一定声明了：
+- **Tool Name**: `Model Viewer`（自动转成 `model-viewer`）。
+- **Starter Type**: `stage`（要 WebGL 全出血自适应视口，而不是固定长宽画板）。
+- **Tech Stacks**: `three`（框架负责预热与缓存共享模块）。
+
+生成后，`src/tools/model-viewer/` 下会有 `metadata.json`、`index.ts`、root-level master `ModelViewer.svelte`，以及 `components/` 下的 starter 子组件。`index.ts` 必须声明 `techStack: ['three']`：
 
 ```typescript
 import metadata from './metadata.json';
@@ -40,9 +54,10 @@ export default definition;
 
 ## 2. 状态映射与组件拆解
 
-3D 工具的主要分工：
-1. 主组件负责 `LeftPanel`、定义**光照**、**网格颜色**、**网格可见性**等 `$state` 参数。负责将参数通过 props 推入到专门的 3D 场景组件内。
-2. 内部组件挂载 `<div class="viewport">`。它订阅挂载宿主的 ResizeObserver，自适应宽高等比投影，并在渲染循环和 `$effect` 中实时反馈左侧面板传来的设定。
+3D 工具的职责拆分：
+
+1. **主组件**：负责 `LeftPanel`、定义光照 / 材质 / 动画等 `$state` 参数，通过 props 推送到专门的 3D 场景组件。
+2. **内部组件**：在 `<div class="viewport">` 上挂 `ResizeObserver` 同步宽高与投影，在渲染循环中调用 Three；在 `$effect` 里实时反馈左侧面板传来的设定。
 
 ---
 
@@ -53,11 +68,12 @@ export default definition;
 ```svelte
 <script lang="ts">
 	import { LeftPanel, FullStage, RightPanel, Section } from '$lib/components/shell/index.js';
-	// 从脚手架生成或自己建立在 components 目录下
+	import { Button } from '$lib/components/ui/button/index.js';
+	// 从脚手架生成或手建在 components 目录下
 	import StageViewport from './components/StageViewport.svelte';
 
 	// ==========================================
-	// 状态：我们要传递给 3D 场景的参数
+	// 状态：要传递给 3D 场景的参数
 	// ==========================================
 	let wireframe = $state(false);
 	let autoRotate = $state(true);
@@ -73,21 +89,20 @@ export default definition;
 
 <LeftPanel>
 	<Section title="Renderer Mode">
-		<label class="model-viewer__field">
-			<!-- 不使用 form，只要 input 配合绑定即可 -->
+		<label class="model-viewer__field model-viewer__field--row">
+			<input type="checkbox" bind:checked={wireframe} />
 			<span class="model-viewer__caption">Wireframe</span>
-			<input class="pixel-checkbox" type="checkbox" bind:checked={wireframe} />
 		</label>
 	</Section>
-	
+
 	<Section title="Mesh Settings">
 		<label class="model-viewer__field">
 			<span class="model-viewer__caption">Albedo</span>
 			<input class="pixel-input" type="text" bind:value={boxColor} />
 		</label>
-		<label class="model-viewer__field">
+		<label class="model-viewer__field model-viewer__field--row">
+			<input type="checkbox" bind:checked={autoRotate} />
 			<span class="model-viewer__caption">Auto Rotate</span>
-			<input class="pixel-checkbox" type="checkbox" bind:checked={autoRotate} />
 		</label>
 	</Section>
 
@@ -99,29 +114,43 @@ export default definition;
 	</Section>
 
 	<Section title="Actions" collapsible>
-		<!-- 预备好的一个导出动作，框架建议优先引入 Buttons -->
-		<button class="pixel-button" onclick={triggerDownload}>Snapshot Image</button>
+		<Button variant="solid" size="md" onclick={triggerDownload}>Snapshot Image</Button>
 	</Section>
 </LeftPanel>
 
 <RightPanel>
 	<FullStage>
-		<!-- 3D 舞台，把参数以 Prop 形式统统砸给内部组件，内部用 effect 去应用 -->
-		<StageViewport 
-			{wireframe} 
-			{autoRotate} 
-			{boxColor} 
-			{keyLightIntensity} 
-			{downloadTrigger} 
+		<!-- 3D 舞台：参数以 props 形式挂到内部组件，内部用 $effect 反向同步。 -->
+		<StageViewport
+			{wireframe}
+			{autoRotate}
+			{boxColor}
+			{keyLightIntensity}
+			{downloadTrigger}
 		/>
 	</FullStage>
 </RightPanel>
 
 <style>
-	/* 同架构指导书：使用共享的 CSS 自定义属性 */
-	.model-viewer__field { display: flex; flex-direction: column; gap: var(--space-2); margin-bottom: var(--space-4); }
-	.model-viewer__caption { color: var(--color-fg-secondary); font-size: var(--font-size-1); letter-spacing: 0.08em; text-transform: uppercase; }
-	.pixel-button { padding: var(--space-2) var(--space-4); background: var(--color-bg-surface); color: var(--color-bg-primary); border: 1px solid var(--color-border); cursor: pointer; }
+	/* 使用共享的 CSS 自定义属性，间距 / 字号 / 边框一律用 px。*/
+	.model-viewer__field {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+		margin-bottom: var(--space-4);
+	}
+
+	.model-viewer__field--row {
+		flex-direction: row;
+		align-items: center;
+	}
+
+	.model-viewer__caption {
+		color: var(--color-fg-secondary);
+		font-size: var(--font-size-1);
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+	}
 </style>
 ```
 
@@ -137,11 +166,48 @@ export default definition;
 - **通过 `$effect` 自动同步**
 - **返回妥善清理的卸载函数**
 
+推荐把 Three 的类型边界拆成两层：
+- 模块类型统一从 `$lib/types/tech-stack` 的 `TechStackModule<'three'>` 派生，`loadTechStack('three')` 不再手写 `typeof import('three')` 断言。
+- 长期存活的场景对象只声明当前组件真正会访问的最小句柄类型；这样能保持懒加载写法，同时避免为了动态图形命名空间退回 `any`。
+
 ```svelte
 <script lang="ts">
 	import { onMount } from 'svelte';
 	// 从运行时获取加载器
 	import { loadTechStack } from '$lib/runtime/tech-stack';
+	import type { TechStackModule } from '$lib/types/tech-stack';
+
+	type ThreeModule = TechStackModule<'three'>;
+	type DisposableHandle = {
+		dispose(): void;
+	};
+	type RendererHandle = DisposableHandle & {
+		domElement: HTMLCanvasElement;
+		render(scene: unknown, camera: unknown): void;
+		setPixelRatio(nextPixelRatio: number): void;
+		setSize(width: number, height: number, updateStyle?: boolean): void;
+	};
+	type MaterialHandle = DisposableHandle & {
+		wireframe: boolean;
+		color: { set(value: string): void };
+	};
+	type LightHandle = {
+		intensity: number;
+		position: { set(x: number, y: number, z: number): void };
+	};
+	type MeshHandle = {
+		rotation: { x: number; y: number };
+	};
+	type SceneHandle = {
+		background: unknown;
+		add(object: unknown): void;
+	};
+	type CameraHandle = {
+		position: { set(x: number, y: number, z: number): void };
+		lookAt(x: number, y: number, z: number): void;
+		aspect: number;
+		updateProjectionMatrix(): void;
+	};
 
 	interface Props {
 		wireframe: boolean;
@@ -157,12 +223,12 @@ export default definition;
 	let errorMessage = $state('');
 
 	// 记录 Three 的持久层实例
-	let renderer: any = null;
-	let material: any = null;
-	let keyLight: any = null;
-	let cube: any = null;
-	let scene: any = null;
-	let camera: any = null;
+	let renderer: RendererHandle | null = null;
+	let material: MaterialHandle | null = null;
+	let keyLight: LightHandle | null = null;
+	let cube: MeshHandle | null = null;
+	let scene: SceneHandle | null = null;
+	let camera: CameraHandle | null = null;
 
 	// ==========================================
 	// 使用 $effect 实现单向数据流与材质同步
@@ -200,12 +266,12 @@ export default definition;
 		let resizeObserver: ResizeObserver | null = null;
 		
 		// 持久几何体与光照声明，用于销毁
-		let geometry: any = null;
+		let geometry: DisposableHandle | null = null;
 
 		void (async () => {
 			try {
 				// 获取由 loadTechStacks 自动预加载好的缓冲中的 THREE 对象
-				const THREE = (await loadTechStack('three')) as typeof import('three');
+				const THREE: ThreeModule = await loadTechStack('three');
 
 				if (disposed || !hostElement) return;
 
@@ -315,7 +381,7 @@ export default definition;
 	}
 
 	.stage-viewport__wrapper {
-		flex: base 100%;
+		flex: 1 1 100%;
 		display: flex;
 		width: 100%;
 		height: 100%;

@@ -1,6 +1,4 @@
-# Tool 开发指南
-
-> 适用版本：当前仓库（基于 Pixel Tool Framework）
+# Tools - Getting Started
 
 ## 开始之前
 

@@ -23,17 +23,20 @@
 
 ### 颜色 Token
 
-背景层从最暗到最亮依次递进：
+背景层从最暗到最亮均由 `--color-bg-app` 表达式派生，步长变量 `--color-bg-step` 负责统一调节层级距离：
 
-| Token | 值 | 用途 |
+| Token | 描述 | 用途 |
 |---|---|---|
-| `--color-bg-app` | `oklch(0.085 0.024 264)` | 页面级背景（基准色） |
-| `--color-bg-panel` | `oklch(from --bg-app l+0.030 c h)` | 面板/组件背景 |
-| `--color-bg-surface` | `oklch(from --bg-app l+0.080 c h)` | 浮层表面、对话框 |
-| `--color-bg-elevated` | `oklch(from --bg-app l+0.130 c h)` | 按钮、输入框静止状态 |
-| `--color-bg-inset` | `oklch(from --bg-app l+0.095 c+0.014 h)` | 凹陷区域、输入字段 |
-| `--color-bg-muted` | `oklch(from --bg-app l+0.120 c+0.021 h)` | 低调交互区域 |
-| `--color-bg-highlight` | `oklch(from --color-accent l c h / 14%)` | 悬停高亮 |
+| `--color-bg-app` | 基准背景色（默认 `oklch(0.085 0 0)`） | 页面填充 |
+| `--color-bg-left-panel` | app 上提 ~1.2 个步长 | 左侧面板背景 |
+| `--color-bg-right-panel` | app 上提 ~1.5 个步长 | 右侧舞台背景 |
+| `--color-bg-surface` | app 上提 ~2 个步长 | 面板表面、对话框 |
+| `--color-bg-elevated` | app 上提 ~3 个步长 | 按钮 / 输入框静止态 |
+| `--color-bg-inset` | 接近 surface 但略偏亮 | 凹陷区域、输入字段 |
+| `--color-bg-muted` | 接近 elevated 但略偏暗 | 低调交互区域 |
+| `--color-bg-input-active` | app 上提 ~1 个步长 | 输入框 hover/focus |
+| `--color-bg-canvas` | app 上提 ~1.2 个步长 | PreviewCanvas 背景、棋盘格 |
+| `--color-bg-highlight` | `oklch(1 0 0 / 8%)` | 悬停高亮、菜单高亮 |
 
 前景色 Token：
 
@@ -47,18 +50,20 @@
 
 | Token | 用途 |
 |---|---|
-| `--color-accent` | 主强调色（oklch(0.610 0.185 291) 紫色） |
+| `--color-accent` | 主强调色（`oklch(0.610 0.185 291)` 紫色） |
 | `--color-accent-soft` | 浅色强调变体 |
-| `--color-danger` | 错误/破坏性操作 |
+| `--color-danger` | 错误 / 破坏性操作 |
 | `--color-success` | 成功状态 |
 
-边框色 Token：
+边框与阴影 Token：
 
 | Token | 用途 |
 |---|---|
 | `--color-border-strong` | 可见边框 |
 | `--color-border-soft` | 细微分割线 |
 | `--color-border-focus` | 焦点环 |
+| `--color-shadow` | 面板 / 对话框投影 |
+| `--color-scroll-track` / `--color-scroll-thumb` | `.pixel-scrollbar` 专用 |
 
 ### 间距 Token
 
@@ -77,24 +82,27 @@
 ### 字体 Token
 
 ```css
---font-family-base: 'Mono10', 'Noto Sans SC', monospace;
+--font-family-base: 'GeistPixelSquare', 'Noto Sans SC', ui-monospace, 'SFMono-Regular', 'Menlo', monospace;
 --font-size-1: 10px;  /* 标签、徽章、元数据 */
 --font-size-2: 12px;  /* 正文（默认） */
 --font-size-3: 14px;  /* 强调正文 */
 --font-size-4: 16px;  /* 副标题 */
 --font-size-5: 20px;  /* 标题 */
+--line-height-tight: 1.25;
+--line-height-base: 1.5;
 ```
 
 ### 边框与圆角 Token
 
 ```css
---border-width-outer: 4px;  /* 像素帧边框 */
---border-width-inner: 2px;  /* 输入框/按钮边框 */
+--border-width-outer: 1px;  /* 面板 / 外层容器 */
+--border-width-inner: 1px;  /* 输入框 / 按钮 */
 --radius-sm: 4px;
 --radius-md: 8px;
 --radius-lg: 12px;
---pixel-border-source: url('./lib/assets/ui/pixel-border.svg');
 ```
+
+> 注：当前设计语言只在少数场景使用圆角；默认依靠 1px 硬边呈现像素魔幻。
 
 ### 动画 Token
 
@@ -434,21 +442,20 @@ export { default as Button } from './Button.svelte';
 
 ### `.pixel-frame`
 
-使用 SVG `border-image` 应用标志性的像素艺术边框：
+为面板 / 对话框提供一致的边框与阴影组合：
 
 ```css
 .pixel-frame {
-  border: var(--border-width-outer) solid transparent;
-  border-image-source: var(--pixel-border-source);
-  border-image-slice: 4 fill;
-  border-image-width: 4px;
-  border-image-repeat: stretch;
-  background: var(--color-bg-surface);
-  box-shadow: 0 18px 48px var(--color-shadow);
+	display: block;
+	position: relative;
+	overflow: hidden;
+	border: var(--border-width-outer) solid var(--color-border-strong);
+	background: var(--color-bg-surface);
+	box-shadow: 0 14px 36px var(--color-shadow);
 }
 ```
 
-用途：应用于需要像素边框效果的面板、卡片或对话框。
+用途：需要“面板感”的干净容器。
 
 ```svelte
 <section class="preview-canvas pixel-frame">
@@ -468,12 +475,12 @@ export { default as Button } from './Button.svelte';
 
 ### `.pixel-checkerboard`
 
-带有细微内嵌阴影与网格风格背景，用于画布/预览区域：
+给画布 / 预览区域提供统一的棋盘格背景：
 
 ```css
 .pixel-checkerboard {
-  background-color: #141c2b;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+	background-color: var(--color-bg-canvas);
+	box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
 }
 ```
 
@@ -513,9 +520,9 @@ export { default as Button } from './Button.svelte';
 
 不要引入 Bootstrap、UnoCSS、styled-components 或类似库。样式系统仅使用 CSS Custom Properties + Svelte 作用域样式。
 
-### 禁止与 `border-image` 系统冲突
+### 禁止在 `.pixel-frame` 上叠加 `border-radius`
 
-`border-image` 属性不支持 `border-radius`。如果应用了 `.pixel-frame`，就不能在同一元素上使用 `border-radius`。如果需要圆角，请改用普通 `border`。
+`.pixel-frame` 是为硬边、像素质感设计的面板。如果你需要圆角面板，请别套用 `.pixel-frame`，直接手写一套使用 `--radius-*` token 的边框即可。
 
 ### 禁止覆盖壳层布局
 
@@ -602,12 +609,9 @@ Tool 在 `<LeftPanel>` 和 `<RightPanel>` 内渲染内容。禁止：
   .popover__content {
     min-width: 200px;
     padding: var(--space-4);
-    border: var(--border-width-outer) solid transparent;
-    border-image-source: var(--pixel-border-source);
-    border-image-slice: 4 fill;
-    border-image-width: 4px;
+    border: var(--border-width-outer) solid var(--color-border-strong);
     background: var(--color-bg-surface);
-    box-shadow: 0 18px 42px rgba(0, 0, 0, 0.42);
+    box-shadow: 0 18px 42px var(--color-shadow);
   }
 </style>
 ```

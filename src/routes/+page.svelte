@@ -194,11 +194,7 @@
 <div class="workspace">
 	<header class="workspace__header">
 		<div class="workspace__brand">
-			<!-- <div class="workspace__brand-icon">
-				<PixelIcon name="aspect-ratio" size={18} />
-			</div> -->
 			<div class="workspace__brand-copy">
-				<!-- <span class="workspace__eyebrow">Pixel Tool Framework</span> -->
 				<strong class="workspace__title">Marble Design Toolset</strong>
 			</div>
 		</div>
@@ -212,6 +208,10 @@
 				<PixelIcon name="sparkles" size={14} />
 				<span>Help</span>
 			</Button>
+			<a class="button button--ghost button--sm" href="/docs" target="_blank" rel="noreferrer noopener">
+				<PixelIcon name="info-box" size={14} />
+				<span>Docs</span>
+			</a>
 			<Button variant="ghost" size="sm" onclick={() => (settingsDialogOpen = true)}>
 				<PixelIcon name="settings-2" size={14} />
 				<span>Settings</span>
@@ -401,29 +401,11 @@
 		min-width: 0;
 	}
 
-	.workspace__brand-icon {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 24px;
-		height: 24px;
-		border: 1px solid rgba(149, 128, 255, 0.36);
-		background: transparent;
-		color: var(--color-accent-soft);
-	}
-
 	.workspace__brand-copy {
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-1);
 		min-width: 0;
-	}
-
-	.workspace__eyebrow {
-		color: var(--color-fg-muted);
-		font-size: var(--font-size-1);
-		text-transform: uppercase;
-		letter-spacing: 0.1em;
 	}
 
 	.workspace__title {

@@ -6,5 +6,9 @@
     "Procedual"
   ],
   "version": "1.0.0",
-  "enabled": true
+  "enabled": true,
+  "export": {
+    "image": true,
+    "video": true
+  }
 }

@@ -1,5 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import { createCanvasExportRegistry } from '$lib/runtime/canvas-export/registry.svelte';
+	import { setCanvasExportContext } from '$lib/runtime/canvas-export/context';
 
 	interface Props {
 		leftPanelWidthVw?: number;
@@ -7,6 +9,14 @@
 	}
 
 	let { leftPanelWidthVw = 28, children }: Props = $props();
+
+	const canvasExportRegistry = createCanvasExportRegistry();
+	setCanvasExportContext({
+		get exporters() {
+			return canvasExportRegistry.exporters;
+		},
+		register: (descriptor) => canvasExportRegistry.register(descriptor)
+	});
 </script>
 
 <div class="tool-shell" style={`--tool-shell-left-panel-width:${leftPanelWidthVw}vw;`}>

@@ -2,6 +2,7 @@
 	import type { Snippet } from 'svelte';
 	import { getToolShellContext } from '$lib/runtime/tool-shell-context';
 	import { MainInfo } from '../main-info/index.js';
+	import { ExportSection } from '../export-section/index.js';
 
 	interface Props {
 		children?: Snippet;
@@ -9,6 +10,11 @@
 
 	let { children }: Props = $props();
 	const shellContext = getToolShellContext();
+
+	const exportCapabilities = $derived(shellContext?.metadata?.export ?? {});
+	const showExportSection = $derived(
+		exportCapabilities.image === true || exportCapabilities.video === true
+	);
 </script>
 
 <aside class="left-panel pixel-scrollbar">
@@ -22,6 +28,10 @@
 
 	<div class="left-panel__sections">
 		{@render children?.()}
+
+		{#if showExportSection}
+			<ExportSection {exportCapabilities} />
+		{/if}
 	</div>
 </aside>
 

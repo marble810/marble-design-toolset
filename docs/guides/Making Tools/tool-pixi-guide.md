@@ -1,10 +1,24 @@
-# 在 Marble Design Toolset 中创建基于 PixiJS 的 Tool
+# Making Tools with PixiJS
 
-本指南将带你从零开始，在 **Marble Design Toolset** 中创建一个基于 **PixiJS** 的 2D 纹理生成工具。我们将学习如何配置参数区、如何使用 `PreviewCanvas` 呈现 PixiJS 画布、如何实现实时效果预览，以及如何提供导出设置。
+本指南带你在 **Marble Design Toolset** 里从零搭建一个基于 **PixiJS** 的 2D 纹理生成工具。读完后你能：
+
+- 在 `LeftPanel` 中组织参数区
+- 用 `PreviewCanvas` 承载固定宽高的 Pixi 画布
+- 在 prop 变化时驱动 Pixi 重绘
+- 通过 `loadTechStack('pixi')` 拿到框架预热好的 Pixi 实例
+- 提供导出（截图为 PNG）能力
+
+## TL;DR
+
+1. `bun run create:tool` → 选 `preview` starter + `pixi` tech stack。
+2. 在 master `.svelte` 里组合 `LeftPanel` + `<PreviewCanvas contentWidth={...} contentHeight={...}>`，把 Pixi 子组件挂在 `PreviewCanvas` 内。
+3. 在 Pixi 子组件 `onMount` 中 `await loadTechStack('pixi')`，创建 `PIXI.Application` 并把 `app.canvas` 挂进 host element。
+4. 用 `$effect` 监听 props，调用 renderer 的 resize / 自定义 update 函数同步参数。
+5. `onMount` 返回的 cleanup 函数里 `app.destroy(true, { children: true })`。
 
 ## 适用场景
 
-PixiJS 非常适合需要高性能 2D 渲染、过程纹理生成、粒子效果或复杂 2D 滤镜组合的工具。在 Marble Design Toolset 中，我们通常使用 `PreviewCanvas` 作为此类工具的展示舞台，因为它可以处理定宽高的画布居中、缩放和平移，而工具本身只需关注 Pixi.js 的逻辑。
+PixiJS 适合高性能 2D 渲染、过程纹理生成、粒子效果或复杂 2D 滤镜组合。在 Marble Design Toolset 中，这类工具通常用 `PreviewCanvas` 作为展示舞台：它把画布居中、Fit/1:1 缩放、拖拽平移和棋盘格背景全部包了，工具本身只需要专注 Pixi 渲染逻辑。
 
 ---
 
@@ -17,15 +31,16 @@ bun run create:tool
 ```
 
 交互提示时：
-- **Tool Name**: 输入你的工具名称，例如 `Noise Generator` (它会转化为 id `noise-generator`)
-- **Starter Type**: 选择 `preview` (因为我们要用到 `PreviewCanvas`)
-- **Tech Stacks**: 输入 `pixi` (告诉加载器我们需要 PixiJS)
 
-脚手架会自动在 `src/tools/noise-generator/` 创建好 `metadata.json`、`index.ts`、主组件和私有组件目录。
+- **Tool Name**: 输入工具名，例如 `Noise Generator`（自动转成 id `noise-generator`）。
+- **Starter Type**: 选 `preview`（我们要用 `PreviewCanvas`）。
+- **Tech Stacks**: 选 `pixi`（让框架预热共享 PixiJS 模块）。
 
-### 如果你手工创建：
+脚手架会在 `src/tools/noise-generator/` 下创建符合 schema 的 `metadata.json`、`index.ts`、唯一的 root-level master `.svelte`，以及 `components/` 私有目录。
 
-你需要准备以下文件结构：
+### 如果你手工创建
+
+准备以下文件结构（root-level 只能有一个 `.svelte`，其余子组件都放进 `components/`）：
 ```text
 src/tools/noise-generator/
 ├── metadata.json
@@ -53,12 +68,12 @@ export default definition;
 
 ## 2. 设计交互与数据流
 
-一个标准的 PixiJS 工具需要处理这些事情：
+标准 Pixi 工具的职责拆分：
 
-1. **参数定义**: 在主组件维护各种参数状态 (Svelte `$state`)。
-2. **右侧舞台**: 在 `RightPanel` 中放入 `PreviewCanvas`，并在其中挂载一个自己手写的 PixiJS 组件。
-3. **参数传递**: 把参数通过 props 传给负责渲染的子组件。
-4. **渲染循环/触发**: Pixi 组件在参数变更时更新材质并重绘。
+1. **主组件**：维护参数 `$state`，组合 `LeftPanel` 与 `RightPanel`，把参数以 props 推到 Pixi 子组件。
+2. **右侧舞台**：用 `PreviewCanvas` 提供固定宽高的画布区域；Pixi 子组件作为 PreviewCanvas 的 children。
+3. **参数同步**：在 Pixi 子组件用 `$effect` 监听 props 变化并调用 Pixi 实例方法。
+4. **生命周期**：`onMount` 内异步初始化、`onMount` 返回函数中 `destroy()`。
 
 ---
 
@@ -122,7 +137,7 @@ export default definition;
 	</Section>
 
 	<Section title="Actions" collapsible>
-		<Button variant="primary" onclick={handleExport}>Export as PNG</Button>
+		<Button variant="solid" size="md" onclick={handleExport}>Export as PNG</Button>
 	</Section>
 </LeftPanel>
 
@@ -156,11 +171,20 @@ export default definition;
 
 在子组件中，利用 `loadTechStack` 获取 PixiJS。这样框架会在外层保证库被加载并缓存，内部直接拿来用即可。我们需要处理：创建应用、挂载节点、响应参数变化、销毁。
 
+推荐把类型写法固定成两层：
+- 模块类型从 `$lib/types/tech-stack` 的 `TechStackModule<'pixi'>` 派生。
+- 长期存活的实例用 `import type` 从 `pixi.js` 获取类型，不要把 `Application` 或自定义控制器声明成 `any`。
+
 ```svelte
 <script lang="ts">
 	import { onMount } from 'svelte';
 	// 从运行时获取加载器
 	import { loadTechStack } from '$lib/runtime/tech-stack';
+	import type { TechStackModule } from '$lib/types/tech-stack';
+	import type { Application } from 'pixi.js';
+
+	type PixiModule = TechStackModule<'pixi'>;
+	type PixiApp = Application;
 
 	// ==========================================
 	// Props 接收
@@ -183,7 +207,7 @@ export default definition;
 	let errorMessage = $state('');
 
 	// 保存 Pixi 应用实例以便能在 prop 变化时调用
-	let pixiApp: any = null;
+	let pixiApp: PixiApp | null = null;
 
 	// 我们用一个 effect 来监听参数变化并要求 Pixi 重绘
 	// （这里演示为重新渲染，具体依赖滤镜、着色器或材质的写法）
@@ -233,7 +257,7 @@ export default definition;
 		void (async () => {
 			try {
 				// 获取预加载好的 PIXI，因为 index.ts 中声明了，此时应该瞬间返回
-				const PIXI = (await loadTechStack('pixi')) as typeof import('pixi.js');
+				const PIXI: PixiModule = await loadTechStack('pixi');
 
 				if (disposed || !hostElement) return;
 

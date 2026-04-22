@@ -1,6 +1,18 @@
 import type { Component } from 'svelte';
+import type { TechStackKey } from './tech-stack';
 
-export type TechStackKey = 'three' | 'pixi' | 'gsap';
+export type { TechStackKey } from './tech-stack';
+
+/**
+ * Declares which kinds of canvas exports a tool advertises in the framework
+ * Export panel. Both flags default to `false`. Tools that declare an export
+ * kind must also register a matching exporter via `getCanvasExportContext()`,
+ * otherwise the panel renders the controls in a disabled state with a hint.
+ */
+export interface ToolExportCapabilities {
+	image?: boolean;
+	video?: boolean;
+}
 
 export interface ToolMetadata {
 	name: string;
@@ -8,6 +20,7 @@ export interface ToolMetadata {
 	tag: string[];
 	version: string;
 	enabled?: boolean;
+	export?: ToolExportCapabilities;
 }
 
 export interface ToolMenuAction {

@@ -1,66 +1,111 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { loadTechStack } from '$lib/runtime/tech-stack';
+	import type { TechStackModule } from '$lib/types/tech-stack';
+	import { getCanvasExportContext } from '$lib/runtime/canvas-export/context';
+
+	type ThreeModule = TechStackModule<'three'>;
+	type DisposableHandle = {
+		dispose(): void;
+	};
+	type CameraHandle = {
+		position: { set(x: number, y: number, z: number): void };
+		lookAt(x: number, y: number, z: number): void;
+		aspect: number;
+		updateProjectionMatrix(): void;
+	};
+	type RendererHandle = DisposableHandle & {
+		domElement: HTMLCanvasElement;
+		shadowMap: { enabled: boolean };
+		render(scene: unknown, camera: unknown): void;
+		setPixelRatio(nextPixelRatio: number): void;
+		setSize(width: number, height: number, updateStyle?: boolean): void;
+	};
+	type SceneHandle = {
+		background: unknown;
+		add(object: unknown): void;
+	};
+	type MeshHandle = {
+		add(object: unknown): void;
+		rotation: { x: number; y: number };
+	};
+	type LightHandle = {
+		position: { set(x: number, y: number, z: number): void };
+	};
 
 	let hostElement = $state<HTMLDivElement | null>(null);
 	let isReady = $state(false);
 	let errorMessage = $state('');
 
+	// Must be read during component initialization (Svelte 5 getContext rule),
+	// not inside the async IIFE in onMount.
+	const exportContext = getCanvasExportContext();
+
 	onMount(() => {
 		let disposed = false;
 		let animationFrame = 0;
-		let renderer: any = null;
-		let geometry: any = null;
-		let material: any = null;
-		let edgesGeometry: any = null;
-		let edgesMaterial: any = null;
+		let renderer: RendererHandle | null = null;
+		let geometry: DisposableHandle | null = null;
+		let material: DisposableHandle | null = null;
+		let edgesGeometry: DisposableHandle | null = null;
+		let edgesMaterial: DisposableHandle | null = null;
 		let resizeObserver: ResizeObserver | null = null;
+		let unregisterExporter: (() => void) | null = null;
 
 		void (async () => {
 			try {
-				const THREE = (await loadTechStack('three')) as any;
+				const THREE: ThreeModule = await loadTechStack('three');
 
 				if (disposed || !hostElement) {
 					return;
 				}
 
 				const scene = new THREE.Scene();
-				scene.background = new THREE.Color('#16202f');
+				const sceneHandle = scene as unknown as SceneHandle;
+				sceneHandle.background = new THREE.Color('#16202f');
 
 				const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
-				camera.position.set(1.8, 1.5, 2.9);
-				camera.lookAt(0, 0, 0);
+				const cameraHandle = camera as unknown as CameraHandle;
+				cameraHandle.position.set(1.8, 1.5, 2.9);
+				cameraHandle.lookAt(0, 0, 0);
 
-				renderer = new THREE.WebGLRenderer({ antialias: false });
+				renderer = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true }) as unknown as RendererHandle;
 				renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 				renderer.shadowMap.enabled = false;
 				hostElement.replaceChildren(renderer.domElement as HTMLCanvasElement);
 
-				geometry = new THREE.BoxGeometry(1, 1, 1);
-				material = new THREE.MeshStandardMaterial({
+				const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
+				const meshMaterial = new THREE.MeshStandardMaterial({
 					color: '#8f7ff0',
 					roughness: 0.6,
 					metalness: 0.05
 				});
+				geometry = boxGeometry;
+				material = meshMaterial;
 
-				const cube = new THREE.Mesh(geometry, material);
-				scene.add(cube);
+				const cube = new THREE.Mesh(boxGeometry, meshMaterial);
+				const cubeHandle = cube as unknown as MeshHandle;
+				sceneHandle.add(cube);
 
-				edgesGeometry = new THREE.EdgesGeometry(geometry);
-				edgesMaterial = new THREE.LineBasicMaterial({ color: '#f4f0ff' });
-				const edges = new THREE.LineSegments(edgesGeometry, edgesMaterial);
-				cube.add(edges);
+				const cubeEdgesGeometry = new THREE.EdgesGeometry(boxGeometry);
+				const cubeEdgesMaterial = new THREE.LineBasicMaterial({ color: '#f4f0ff' });
+				edgesGeometry = cubeEdgesGeometry;
+				edgesMaterial = cubeEdgesMaterial;
+				const edges = new THREE.LineSegments(cubeEdgesGeometry, cubeEdgesMaterial);
+				cubeHandle.add(edges);
 
 				const ambientLight = new THREE.AmbientLight('#b8c4ff', 0.7);
-				scene.add(ambientLight);
+				sceneHandle.add(ambientLight);
 
 				const keyLight = new THREE.DirectionalLight('#ffffff', 1.15);
-				keyLight.position.set(2.5, 3, 4);
-				scene.add(keyLight);
+				const keyLightHandle = keyLight as unknown as LightHandle;
+				keyLightHandle.position.set(2.5, 3, 4);
+				sceneHandle.add(keyLight);
 
 				const rimLight = new THREE.DirectionalLight('#7f8cff', 0.4);
-				rimLight.position.set(-3, 1.5, -2);
-				scene.add(rimLight);
+				const rimLightHandle = rimLight as unknown as LightHandle;
+				rimLightHandle.position.set(-3, 1.5, -2);
+				sceneHandle.add(rimLight);
 
 				const resize = () => {
 					if (!hostElement || !renderer) {
@@ -70,8 +115,8 @@
 					const width = Math.max(hostElement.clientWidth, 1);
 					const height = Math.max(hostElement.clientHeight, 1);
 					renderer.setSize(width, height, false);
-					camera.aspect = width / height;
-					camera.updateProjectionMatrix();
+					cameraHandle.aspect = width / height;
+					cameraHandle.updateProjectionMatrix();
 				};
 
 				resize();
@@ -80,9 +125,27 @@
 
 				isReady = true;
 
+				if (exportContext && renderer) {
+					const rendererRef = renderer;
+					unregisterExporter = exportContext.register({
+						kind: 'canvas',
+						get contentWidth() {
+							return (rendererRef.domElement as HTMLCanvasElement).width;
+						},
+						get contentHeight() {
+							return (rendererRef.domElement as HTMLCanvasElement).height;
+						},
+						getCanvas: () => {
+							// Force a fresh render so the buffer is current at capture time.
+							rendererRef.render(scene, camera);
+							return rendererRef.domElement as HTMLCanvasElement;
+						}
+					});
+				}
+
 				const renderFrame = () => {
-					cube.rotation.x += 0.01;
-					cube.rotation.y += 0.016;
+					cubeHandle.rotation.x += 0.01;
+					cubeHandle.rotation.y += 0.016;
 					renderer?.render(scene, camera);
 					animationFrame = window.requestAnimationFrame(renderFrame);
 				};
@@ -95,6 +158,7 @@
 
 		return () => {
 			disposed = true;
+			unregisterExporter?.();
 			window.cancelAnimationFrame(animationFrame);
 			resizeObserver?.disconnect();
 			geometry?.dispose();
