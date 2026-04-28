@@ -1,0 +1,11 @@
+{
+  "name": "Chromatic Aberration",
+  "desc": "Apply lens-style chromatic aberration to images and videos with per-channel radial warp and linear offset control.",
+  "tag": ["image", "effect", "pixi", "lens"],
+  "version": "1.0.0",
+  "enabled": true,
+  "export": {
+    "image": true,
+    "video": true
+  }
+}

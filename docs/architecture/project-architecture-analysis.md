@@ -68,26 +68,31 @@ static/                        # 静态资源直通
 
 1. **目录加载（同步）**：`getToolCatalog()` 从 `tool-registry.ts` 取出已 eager 解析过的 metadata 列表（已按 `enabled !== false` 过滤、按 name 排序）。
 2. **状态恢复**：`resolveInitialWorkspaceState(validToolIds)` 综合 hash + localStorage + 默认值，得到 `{ openToolIds, activeToolId, leftPanelWidthVw }`，仅在 `browser` 时执行。
-3. **Tab 管理**：`openTabs` 由 `openToolIds` 派生为 `TabItem[]`，传给共享 `Tabs` 包装层。`activateTool` / `closeTool` 维持 open 列表与 active 标识；关闭最后一个 tab 时退到空状态界面。
-4. **持久化与 hash 同步**：`$effect` 同步把状态写入 localStorage、把 `activeToolId` 写入 hash；监听 `hashchange`，允许从外部 URL 切换活动工具。
-5. **tool 加载流水线**：当 `activeToolId` 变化时启动一个带 `toolLoadVersion` 的异步任务：`loadToolDefinition` → `loadTechStacks(definition.techStack)` → `definition.loadComponent()`，期间 UI 显示 Loading；过期请求会被 `currentLoad !== toolLoadVersion` 守卫忽略，避免快速切换时旧组件覆盖新组件。
-6. **shell context 注入**：通过 [src/lib/runtime/tool-shell-context.ts](src/lib/runtime/tool-shell-context.ts) 的 Svelte context API，把当前工具的 `metadata` / `menuActions` / `openAbout` / `onMenuAction` 暴露给 `MainInfo`，工具自身无需重新声明这些信息。
-7. **顶层 chrome**：Header（Open / Help / Docs / Settings）、Tabs、`<ToolShell>` 容器、Open / Help / Settings / About 四个 `Dialog`。Docs 入口是普通 `<a href="/docs">`，不属于 workspace shell 状态。
+3. **Tab 管理**：`openTabs` 由 `openToolIds` 派生为 `TabItem[]`，传给共享 `Tabs` 包装层；`activateWorkspaceToolSelection` / `closeWorkspaceToolSelection` 统一维护 open 列表与 active 标识，保证重新激活已打开工具时不会产生重复会话。
+4. **会话栈渲染**：`+page.svelte` 不再只挂载单一活动组件，而是对 `openToolIds` 渲染稳定 keyed 的 `ToolSession` 栈。切换 tab 只改变 `isActive`，隐藏会话保持挂载；关闭 tab 才真正卸载对应工具实例。
+5. **每会话加载流水线**：每个 `ToolSession` 在首次挂载时独立执行 `loadToolDefinition` → `loadTechStacks(definition.techStack)` → `definition.loadComponent()`，并在自身内部维护 loading / retry / loadVersion；切换活动标签不会重新加载已存在会话。
+6. **每会话 shell 与导出上下文**：`ToolSession` 为每个工具实例单独注入 [src/lib/runtime/tool-shell-context.ts](src/lib/runtime/tool-shell-context.ts)，而 [src/lib/components/shell/tool-shell/ToolShell.svelte](src/lib/components/shell/tool-shell/ToolShell.svelte) 会为每个会话创建独立 canvas export registry，因此 `MainInfo`、About 和 Export Section 都绑定当前可见会话，而不是路由级全局单例。
+7. **活动/隐藏生命周期**：`ToolSession` 通过 [src/lib/runtime/tool-session-context.ts](src/lib/runtime/tool-session-context.ts) 暴露可选的 `isActive()` 读取接口。重型工具可在隐藏态暂停 ticker、渲染或高频计算；不消费该接口的旧工具仍然兼容。
+8. **持久化与 hash 同步**：`$effect` 同步把状态写入 localStorage、把 `activeToolId` 写入 hash；监听 `hashchange`，允许从外部 URL 切换活动工具，并在首次加载时把合法 hash 工具并入已打开集合。
+9. **顶层 chrome**：Header（Open / Help / Docs / Settings）、Tabs、Open / Help / Settings 三个顶层 `Dialog` 仍由 workspace shell 拥有；About dialog 则下沉到每个 `ToolSession`，与该会话自己的 metadata 生命周期一致。Docs 入口是普通 `<a href="/docs">`，不属于 workspace shell 状态。
 
-工具被挂载时，`+page.svelte` 渲染：
+工作区内容区现在渲染为：
 
 ```svelte
-<ToolShell {leftPanelWidthVw}>
-    <ActiveComponent />
-</ToolShell>
+<div class="workspace__session-stack">
+    {#each openToolIds as toolId (toolId)}
+        <ToolSession toolId={toolId} isActive={activeToolId === toolId} {leftPanelWidthVw} />
+    {/each}
+</div>
 ```
 
-`ActiveComponent` 来自工具自己的 master `.svelte`，工具内部必须使用 framework-owned 的 `LeftPanel` / `RightPanel` 等容器组合自身 UI，不可重定义顶层 grid。
+每个 `ToolSession` 内部再创建自己的 `ToolShell` 并挂载工具 master `.svelte`。工具内部仍然只允许使用 framework-owned 的 `LeftPanel` / `RightPanel` 等容器组合自身 UI，不可重定义顶层 grid。
 
 ## 6. 框架壳层组件（src/lib/components/shell）
 
 | 组件 | 文件 | 职责 |
 |---|---|---|
+| `ToolSession` | [tool-session/ToolSession.svelte](src/lib/components/shell/tool-session/ToolSession.svelte) | 每个已打开标签对应一个会话 wrapper，负责 definition/component 懒加载、session shell context 注入、About dialog 与活动/隐藏状态分发 |
 | `ToolShell` | [tool-shell/ToolShell.svelte](src/lib/components/shell/tool-shell/ToolShell.svelte) | 顶层 grid（左面板宽度 = `min(288px, --tool-shell-left-panel-width)`，右面板 `1fr`），通过 `--tool-shell-left-panel-width` CSS var 接收 `leftPanelWidthVw` |
 | `LeftPanel` | [left-panel/LeftPanel.svelte](src/lib/components/shell/left-panel/LeftPanel.svelte) | 在最顶部强制渲染 `MainInfo`，下方 slot 接收工具左侧片段；支持像素滚动条 |
 | `MainInfo` | [main-info/MainInfo.svelte](src/lib/components/shell/main-info/MainInfo.svelte) | 框架拥有的工具信息块，标题/描述来自 `ToolShellContext`，附带 `DropdownMenu`（菜单动作 + About） |

@@ -6,6 +6,8 @@ export const DEFAULT_LEFT_PANEL_WIDTH_VW = 28;
 export const MIN_LEFT_PANEL_WIDTH_VW = 22;
 export const MAX_LEFT_PANEL_WIDTH_VW = 40;
 
+type WorkspaceToolSelection = Pick<WorkspaceState, 'openToolIds' | 'activeToolId'>;
+
 function defaultState(): WorkspaceState {
 	return {
 		openToolIds: [],
@@ -20,6 +22,39 @@ export function clampLeftPanelWidthVw(value: number): number {
 	}
 
 	return Math.min(MAX_LEFT_PANEL_WIDTH_VW, Math.max(MIN_LEFT_PANEL_WIDTH_VW, Math.round(value)));
+}
+
+export function activateWorkspaceToolSelection(
+	state: WorkspaceToolSelection,
+	toolId: string
+): WorkspaceToolSelection {
+	return {
+		openToolIds: state.openToolIds.includes(toolId)
+			? state.openToolIds
+			: [...state.openToolIds, toolId],
+		activeToolId: toolId
+	};
+}
+
+export function closeWorkspaceToolSelection(
+	state: WorkspaceToolSelection,
+	toolId: string
+): WorkspaceToolSelection {
+	const targetIndex = state.openToolIds.indexOf(toolId);
+	if (targetIndex === -1) {
+		return state;
+	}
+
+	const openToolIds = state.openToolIds.filter((id) => id !== toolId);
+	const activeToolId =
+		state.activeToolId === toolId
+			? openToolIds[targetIndex] ?? openToolIds[targetIndex - 1] ?? null
+			: state.activeToolId;
+
+	return {
+		openToolIds,
+		activeToolId
+	};
 }
 
 export function readHashToolId(): string | null {

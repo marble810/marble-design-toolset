@@ -202,6 +202,35 @@ Tool 只负责两件事：
 
 这个边界不是建议，而是框架能正常工作的前提。tool 如果重写 shell 层、重新造一套 workspace 结构，得到的不是扩展，而是破坏。
 
+## Tab 会话语义
+
+workspace 现在采用 keep-alive 的 tab session 模型：
+
+- 切换 tab 时，工具实例**不会**被销毁；同一个已打开 tool 会复用原有会话。
+- 只有用户关闭 tab 时，对应 tool 才会真正卸载。
+- 刷新页面后，workspace 只恢复 `openToolIds`、`activeToolId` 和左侧面板宽度；tool 自己的内部参数默认不会自动持久化。
+
+这意味着一个重要区别：不要再把“切到别的 tab”当成卸载信号。`onMount` 返回的清理函数只会在工具真正销毁时执行，例如用户关闭 tab。
+
+如果你的 tool 有 Pixi、Three、ticker、定时器、观察器或持续计算，可以读取可选的会话活动状态，在隐藏时暂停、重新激活时恢复：
+
+```ts
+import { getToolSessionContext } from '$lib/runtime/tool-session-context';
+
+const toolSessionContext = getToolSessionContext();
+let isSessionActive = $derived(toolSessionContext?.isActive() ?? true);
+
+$effect(() => {
+  if (!isSessionActive) {
+    return;
+  }
+
+  // resume render loop, polling, or preview refresh here
+});
+```
+
+这个接口是可选的。不使用它的现有 tool 仍然可以正常运行；只有当你的 tool 确实有后台资源或高频副作用时，才需要显式消费它。
+
 ## 目录 Schema
 
 每个 tool 必须遵循以下结构：
@@ -290,6 +319,8 @@ export default definition;
 - 组合私有子组件
 
 它不应该包含 workspace shell 级别的内容，比如 header、tabs、settings、全局 dialog 等，也不需要再套一层 `ToolShell`。
+
+另外，master `.svelte` 不需要也不应该关心当前 tab 是否活动。需要隐藏态暂停逻辑时，请在真正持有 Pixi / Three / exporter / observer 生命周期的私有组件里读取 `getToolSessionContext()`，而不是尝试自己操作顶层 tabs 或 workspace DOM。
 
 推荐基础结构（2D 预览工具）：
 

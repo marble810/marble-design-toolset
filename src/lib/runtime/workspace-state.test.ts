@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+	activateWorkspaceToolSelection,
+	closeWorkspaceToolSelection,
 	DEFAULT_LEFT_PANEL_WIDTH_VW,
 	persistWorkspaceState,
 	resolveInitialWorkspaceState
@@ -75,6 +77,70 @@ test('resolveInitialWorkspaceState keeps first load empty when no storage and no
 	} finally {
 		mock.restore();
 	}
+});
+
+test('activateWorkspaceToolSelection appends a newly opened tool and makes it active', () => {
+	assert.deepStrictEqual(
+		activateWorkspaceToolSelection(
+			{
+				openToolIds: ['aspect-ratio'],
+				activeToolId: 'aspect-ratio'
+			},
+			'noise-texture-creater'
+		),
+		{
+			openToolIds: ['aspect-ratio', 'noise-texture-creater'],
+			activeToolId: 'noise-texture-creater'
+		}
+	);
+});
+
+test('activateWorkspaceToolSelection reuses an open session instead of duplicating the tool id', () => {
+	assert.deepStrictEqual(
+		activateWorkspaceToolSelection(
+			{
+				openToolIds: ['aspect-ratio', 'noise-texture-creater'],
+				activeToolId: 'noise-texture-creater'
+			},
+			'aspect-ratio'
+		),
+		{
+			openToolIds: ['aspect-ratio', 'noise-texture-creater'],
+			activeToolId: 'aspect-ratio'
+		}
+	);
+});
+
+test('closeWorkspaceToolSelection removes a closed active tool and promotes the nearest remaining tab', () => {
+	assert.deepStrictEqual(
+		closeWorkspaceToolSelection(
+			{
+				openToolIds: ['aspect-ratio', 'noise-texture-creater', 'hello-world'],
+				activeToolId: 'noise-texture-creater'
+			},
+			'noise-texture-creater'
+		),
+		{
+			openToolIds: ['aspect-ratio', 'hello-world'],
+			activeToolId: 'hello-world'
+		}
+	);
+});
+
+test('closeWorkspaceToolSelection clears the active tool when the last tab closes', () => {
+	assert.deepStrictEqual(
+		closeWorkspaceToolSelection(
+			{
+				openToolIds: ['noise-texture-creater'],
+				activeToolId: 'noise-texture-creater'
+			},
+			'noise-texture-creater'
+		),
+		{
+			openToolIds: [],
+			activeToolId: null
+		}
+	);
 });
 
 test('resolveInitialWorkspaceState adds a valid hash tool to the restored open tabs', () => {

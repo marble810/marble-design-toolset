@@ -5,6 +5,8 @@
 	import type { TabItem } from '$lib/components/ui/tabs/index.js';
 	import { getToolCatalog, isValidToolId } from '$lib/runtime/tool-registry';
 	import {
+		activateWorkspaceToolSelection,
+		closeWorkspaceToolSelection,
 		DEFAULT_LEFT_PANEL_WIDTH_VW,
 		MAX_LEFT_PANEL_WIDTH_VW,
 		MIN_LEFT_PANEL_WIDTH_VW,
@@ -38,10 +40,12 @@
 			return;
 		}
 
-		activeToolId = toolId;
-		if (!openToolIds.includes(toolId)) {
-			openToolIds = [...openToolIds, toolId];
-		}
+		const nextSelection = activateWorkspaceToolSelection(
+			{ openToolIds, activeToolId: activeToolId || null },
+			toolId
+		);
+		openToolIds = nextSelection.openToolIds;
+		activeToolId = nextSelection.activeToolId ?? '';
 	}
 
 	function openTool(toolId: string) {
@@ -50,19 +54,12 @@
 	}
 
 	function closeTool(toolId: string) {
-		const previousToolIds = [...openToolIds];
-		const targetIndex = previousToolIds.indexOf(toolId);
-
-		if (targetIndex === -1) {
-			return;
-		}
-
-		const remainingToolIds = previousToolIds.filter((id) => id !== toolId);
-		openToolIds = remainingToolIds;
-
-		if (activeToolId === toolId) {
-			activeToolId = remainingToolIds[targetIndex] ?? remainingToolIds[targetIndex - 1] ?? '';
-		}
+		const nextSelection = closeWorkspaceToolSelection(
+			{ openToolIds, activeToolId: activeToolId || null },
+			toolId
+		);
+		openToolIds = nextSelection.openToolIds;
+		activeToolId = nextSelection.activeToolId ?? '';
 	}
 
 	function updateLeftPanelWidth(event: Event) {

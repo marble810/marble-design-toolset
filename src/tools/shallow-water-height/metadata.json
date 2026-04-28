@@ -1,0 +1,11 @@
+{
+	"name": "Shallow Water Height",
+	"desc": "Generate black-and-white shallow water height animations from an init map.",
+	"tag": ["simulation", "height-map", "three"],
+	"version": "1.0.0",
+	"enabled": true,
+	"export": {
+		"image": true,
+		"video": true
+	}
+}

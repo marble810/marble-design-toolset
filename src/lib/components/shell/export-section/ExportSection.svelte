@@ -30,8 +30,8 @@
 			.replace(/^-+|-+$/g, '') || 'export';
 	}
 
-	const declaredImage = exportCapabilities.image === true;
-	const declaredVideo = exportCapabilities.video === true;
+	const declaredImage = $derived(exportCapabilities.image === true);
+	const declaredVideo = $derived(exportCapabilities.video === true);
 
 	const supportsPng = $derived(activeExporter?.resolved?.png === true);
 	const supportsMp4 = $derived(
@@ -40,7 +40,7 @@
 	const supports16Bit = $derived(activeExporter?.resolved?.pngBitDepth === 16);
 
 	type Tab = 'image' | 'video';
-	let activeTab = $state<Tab>(declaredImage ? 'image' : 'video');
+	let activeTab = $state<Tab>('image');
 
 	$effect(() => {
 		if (activeTab === 'image' && !declaredImage && declaredVideo) activeTab = 'video';

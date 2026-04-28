@@ -20,4 +20,4 @@
 
 - [x] 4.1 Add or update focused tests for noise parameter typing, helper logic, or export-related controller behavior where practical.
 - [x] 4.2 Run npm run build and resolve any tool-specific compile or type errors introduced by the implementation.
-- [ ] 4.3 Manually verify Perlin and Voronoi previews, each parameter group, square 512x512 output, and both PNG export bit depths.
+- [x] 4.3 Manually verify Perlin and Voronoi previews, each parameter group, square 512x512 output, and both PNG export bit depths.

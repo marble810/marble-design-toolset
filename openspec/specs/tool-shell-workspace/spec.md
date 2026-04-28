@@ -19,11 +19,15 @@
 - **THEN** 浏览器以新标签页打开独立文档浏览页面，并保留当前工作区页面状态不变
 
 ### Requirement: 工具通过可打开与可关闭的标签页管理
-工作区 SHALL 将已打开工具表示为标签页，允许单独关闭标签页，并从本地持久化中恢复已打开标签集合和活动标签。
+工作区 SHALL 将已打开工具表示为标签页，并把每个已打开标签映射为一个独立工具会话。工作区 SHALL 在标签切换时保留仍处于打开状态的工具会话，仅在用户关闭标签页时销毁对应会话。工作区 SHALL 从本地持久化中恢复已打开标签集合和活动标签；当用户首次访问工作区且既无有效 URL hash、也无本地持久化状态时，工作区 SHALL 保持空状态，不自动打开任何工具。
 
 #### Scenario: 从工作区中打开一个工具
 - **WHEN** 用户通过工作区壳层打开一个工具
 - **THEN** 该工具出现在标签栏中并成为活动标签
+
+#### Scenario: 切换标签页后返回原工具
+- **WHEN** 用户在两个已打开工具之间切换活动标签，然后重新回到原工具标签
+- **THEN** 工作区复用原工具现有会话，而不是重新创建该工具
 
 #### Scenario: 用户关闭全部标签页
 - **WHEN** 最后一个剩余标签页被关闭
@@ -32,6 +36,11 @@
 #### Scenario: 工作区重新加载
 - **WHEN** 应用在此前已打开若干标签页后重新加载
 - **THEN** 除非有效 URL hash 指向另一个工具，否则壳层从本地持久化恢复此前的已打开标签页和活动标签
+
+#### Scenario: 用户首次访问工作区
+- **WHEN** 应用首次在当前浏览器环境中加载，且不存在有效 URL hash 与可用的本地持久化工作区状态
+- **THEN** 工作区显示空状态引导
+- **THEN** 工作区不会自动打开任何工具
 
 ### Requirement: 工具必须渲染在严格的壳层布局中
 工作区 SHALL 在框架拥有的左右面板布局中渲染工具内容，其中左面板以框架拥有的 MainInfo 区块开头，右面板承载工具自选的内容呈现方式。
@@ -109,7 +118,7 @@ PreviewCanvas 的外置信息块区域 MUST 默认不可选中，以保持与预
 - **THEN** PreviewCanvas 进行容错裁剪并保持工作区可用
 
 ### Requirement: 活动工具必须映射到 URL hash
-工作区 SHALL 使用工具标识符把当前活动工具同步到 hash 路由中。
+工作区 SHALL 使用工具标识符把当前活动工具同步到 URL hash 中。工作区在带有效工具 hash 加载时，SHALL 激活对应工具；如果该工具尚未存在于当前已打开标签集合中，工作区 MUST 先把它加入已打开标签，再将其设为活动标签。
 
 #### Scenario: 活动工具发生切换
 - **WHEN** 用户激活另一个已打开的工具标签页
@@ -118,6 +127,7 @@ PreviewCanvas 的外置信息块区域 MUST 默认不可选中，以保持与预
 #### Scenario: 应用带有效工具 hash 加载
 - **WHEN** 浏览器以有效工具 hash 打开工作区
 - **THEN** 对应工具成为壳层中的活动工具
+- **THEN** 对应工具出现在当前已打开标签集合中
 
 ### Requirement: Tool 在 metadata 中声明导出能力
 每个 tool SHALL 通过 `metadata.json` 中可选的 `export` 字段声明它向用户暴露的导出能力，结构为 `{ image?: boolean, video?: boolean }`，两个标志默认 `false`。Framework SHALL 仅当至少一个标志为 `true` 时在 LeftPanel 渲染 Export Section。声明该能力的 tool MUST 在其预览组件中通过 `getCanvasExportContext().register(...)` 注册一个匹配的 exporter；若运行时未注册，framework MUST 在 Export Section 中显示提示文字并使导出按钮 disabled。

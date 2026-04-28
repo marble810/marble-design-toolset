@@ -35,6 +35,8 @@ function defaultPickFiles(accept: string): Promise<File[]> {
 	}
 
 	return new Promise((resolve) => {
+		let resolved = false;
+
 		const input = document.createElement('input');
 		input.type = 'file';
 		input.accept = accept;
@@ -47,10 +49,13 @@ function defaultPickFiles(accept: string): Promise<File[]> {
 		function cleanup() {
 			window.removeEventListener('focus', handleFocus);
 			input.removeEventListener('change', handleChange);
+			input.removeEventListener('cancel', handleCancel);
 			input.remove();
 		}
 
 		function finish() {
+			if (resolved) return;
+			resolved = true;
 			const files = Array.from(input.files ?? []);
 			cleanup();
 			resolve(files);
@@ -60,18 +65,19 @@ function defaultPickFiles(accept: string): Promise<File[]> {
 			finish();
 		}
 
+		function handleCancel() {
+			finish();
+		}
+
 		function handleFocus() {
 			window.setTimeout(() => {
-				if (!input.isConnected) {
-					return;
-				}
-
 				finish();
-			}, 0);
+			}, 300);
 		}
 
 		window.addEventListener('focus', handleFocus, { once: true });
 		input.addEventListener('change', handleChange, { once: true });
+		input.addEventListener('cancel', handleCancel, { once: true });
 		document.body.append(input);
 		input.click();
 	});

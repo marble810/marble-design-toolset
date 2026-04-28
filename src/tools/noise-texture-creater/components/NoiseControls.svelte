@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Button } from '$lib/components/ui/button/index.js';
+	import { SliderField } from '$lib/components/ui/slider-field/index.js';
 	import { Section } from '$lib/components/shell/section/index.js';
 	import type {
 		NoiseFamily,
@@ -44,22 +45,10 @@
 		onVoronoiPresetSelect
 	}: Props = $props();
 
-	function readNumber(event: Event, fallback: number): number {
-		const target = event.currentTarget as HTMLInputElement | null;
-		if (!target) {
-			return fallback;
-		}
-
-		const parsed = Number(target.value);
-		return Number.isFinite(parsed) ? parsed : fallback;
-	}
-
-	function readInteger(event: Event, fallback: number): number {
-		return Math.round(readNumber(event, fallback));
-	}
-
 	function isVoronoiPresetActive(preset: VoronoiPreset): boolean {
-		return Object.entries(preset.parameters).every(([key, value]) => voronoi[key as keyof VoronoiNoiseParameters] === value);
+		return Object.entries(preset.parameters).every(
+			([key, value]) => voronoi[key as keyof VoronoiNoiseParameters] === value
+		);
 	}
 </script>
 
@@ -87,140 +76,96 @@
 
 <Section title="Shared Parameters">
 	<div class="noise-controls__grid">
-		<label class="noise-controls__field">
-			<span class="noise-controls__caption">Seed</span>
-			<input
-				class="pixel-input"
-				type="number"
-				min="0"
-				max="9999"
-				step="1"
-				value={shared.seed}
-				oninput={(event) => onSharedChange('seed', readInteger(event, shared.seed))}
-			/>
-		</label>
-
-		<label class="noise-controls__field">
-			<span class="noise-controls__caption">Scale</span>
-			<input
-				class="pixel-input"
-				type="number"
-				min="0.5"
-				max="18"
-				step="0.1"
-				value={shared.scale}
-				oninput={(event) => onSharedChange('scale', readNumber(event, shared.scale))}
-			/>
-		</label>
-
-		<label class="noise-controls__field">
-			<span class="noise-controls__caption">Offset X</span>
-			<input
-				class="pixel-input"
-				type="number"
-				min="-4"
-				max="4"
-				step="0.05"
-				value={shared.offsetX}
-				oninput={(event) => onSharedChange('offsetX', readNumber(event, shared.offsetX))}
-			/>
-		</label>
-
-		<label class="noise-controls__field">
-			<span class="noise-controls__caption">Offset Y</span>
-			<input
-				class="pixel-input"
-				type="number"
-				min="-4"
-				max="4"
-				step="0.05"
-				value={shared.offsetY}
-				oninput={(event) => onSharedChange('offsetY', readNumber(event, shared.offsetY))}
-			/>
-		</label>
-
-		<label class="noise-controls__field">
-			<span class="noise-controls__caption">Brightness</span>
-			<input
-				class="pixel-input"
-				type="number"
-				min="-0.5"
-				max="0.5"
-				step="0.01"
-				value={shared.brightness}
-				oninput={(event) => onSharedChange('brightness', readNumber(event, shared.brightness))}
-			/>
-		</label>
-
-		<label class="noise-controls__field">
-			<span class="noise-controls__caption">Contrast</span>
-			<input
-				class="pixel-input"
-				type="number"
-				min="0.2"
-				max="2.4"
-				step="0.05"
-				value={shared.contrast}
-				oninput={(event) => onSharedChange('contrast', readNumber(event, shared.contrast))}
-			/>
-		</label>
+		<SliderField
+			label="Seed"
+			min={0}
+			max={9999}
+			step={1}
+			hardMin={0}
+			hardMax={9999}
+			value={shared.seed}
+			onchange={(value) => onSharedChange('seed', Math.round(value))}
+		/>
+		<SliderField
+			label="Scale"
+			min={0.5}
+			max={18}
+			step={0.1}
+			value={shared.scale}
+			onchange={(value) => onSharedChange('scale', value)}
+		/>
+		<SliderField
+			label="Offset X"
+			min={-4}
+			max={4}
+			step={0.05}
+			value={shared.offsetX}
+			onchange={(value) => onSharedChange('offsetX', value)}
+		/>
+		<SliderField
+			label="Offset Y"
+			min={-4}
+			max={4}
+			step={0.05}
+			value={shared.offsetY}
+			onchange={(value) => onSharedChange('offsetY', value)}
+		/>
+		<SliderField
+			label="Brightness"
+			min={-0.5}
+			max={0.5}
+			step={0.01}
+			value={shared.brightness}
+			onchange={(value) => onSharedChange('brightness', value)}
+		/>
+		<SliderField
+			label="Contrast"
+			min={0.2}
+			max={2.4}
+			step={0.05}
+			value={shared.contrast}
+			onchange={(value) => onSharedChange('contrast', value)}
+		/>
 	</div>
 </Section>
 
 {#if activeFamily === 'perlin'}
 	<Section title="Perlin Parameters">
 		<div class="noise-controls__grid">
-			<label class="noise-controls__field">
-				<span class="noise-controls__caption">Octaves</span>
-				<input
-					class="pixel-input"
-					type="number"
-					min="1"
-					max="8"
-					step="1"
-					value={perlin.octaves}
-					oninput={(event) => onPerlinChange('octaves', readInteger(event, perlin.octaves))}
-				/>
-			</label>
-
-			<label class="noise-controls__field">
-				<span class="noise-controls__caption">Persistence</span>
-				<input
-					class="pixel-input"
-					type="number"
-					min="0.1"
-					max="0.95"
-					step="0.01"
-					value={perlin.persistence}
-					oninput={(event) => onPerlinChange('persistence', readNumber(event, perlin.persistence))}
-				/>
-			</label>
-
-			<label class="noise-controls__field">
-				<span class="noise-controls__caption">Lacunarity</span>
-				<input
-					class="pixel-input"
-					type="number"
-					min="1.2"
-					max="4"
-					step="0.05"
-					value={perlin.lacunarity}
-					oninput={(event) => onPerlinChange('lacunarity', readNumber(event, perlin.lacunarity))}
-				/>
-			</label>
-
-			<label class="noise-controls__field">
-				<span class="noise-controls__caption">Exponent</span>
-				<input
-					class="pixel-input"
-					type="number"
-					min="0.4"
-					max="3"
-					step="0.05"
-					value={perlin.exponent}
-					oninput={(event) => onPerlinChange('exponent', readNumber(event, perlin.exponent))}
-				/>
-			</label>
+			<SliderField
+				label="Octaves"
+				min={1}
+				max={8}
+				step={1}
+				hardMin={1}
+				hardMax={8}
+				value={perlin.octaves}
+				onchange={(value) => onPerlinChange('octaves', Math.round(value))}
+			/>
+			<SliderField
+				label="Persistence"
+				min={0.1}
+				max={0.95}
+				step={0.01}
+				value={perlin.persistence}
+				onchange={(value) => onPerlinChange('persistence', value)}
+			/>
+			<SliderField
+				label="Lacunarity"
+				min={1.2}
+				max={4}
+				step={0.05}
+				value={perlin.lacunarity}
+				onchange={(value) => onPerlinChange('lacunarity', value)}
+			/>
+			<SliderField
+				label="Exponent"
+				min={0.4}
+				max={3}
+				step={0.05}
+				value={perlin.exponent}
+				onchange={(value) => onPerlinChange('exponent', value)}
+			/>
 		</div>
 	</Section>
 {:else}
@@ -244,116 +189,70 @@
 
 	<Section title="Voronoi Parameters">
 		<div class="noise-controls__grid">
-			<label class="noise-controls__field">
-				<span class="noise-controls__caption">Cell Density</span>
-				<input
-					class="pixel-input"
-					type="number"
-					min="2"
-					max="48"
-					step="1"
-					value={voronoi.cellDensity}
-					oninput={(event) =>
-						onVoronoiChange('cellDensity', readInteger(event, voronoi.cellDensity))}
-				/>
-			</label>
-
-			<label class="noise-controls__field">
-				<span class="noise-controls__caption">Jitter</span>
-				<input
-					class="pixel-input"
-					type="number"
-					min="0"
-					max="1"
-					step="0.01"
-					value={voronoi.jitter}
-					oninput={(event) => onVoronoiChange('jitter', readNumber(event, voronoi.jitter))}
-				/>
-			</label>
-
-			<label class="noise-controls__field">
-				<span class="noise-controls__caption">Edge Width</span>
-				<input
-					class="pixel-input"
-					type="number"
-					min="0.01"
-					max="0.4"
-					step="0.01"
-					value={voronoi.edgeWidth}
-					oninput={(event) =>
-						onVoronoiChange('edgeWidth', readNumber(event, voronoi.edgeWidth))}
-				/>
-			</label>
-
-			<label class="noise-controls__field">
-				<span class="noise-controls__caption">Edge Softness</span>
-				<input
-					class="pixel-input"
-					type="number"
-					min="0.001"
-					max="0.4"
-					step="0.005"
-					value={voronoi.edgeSoftness}
-					oninput={(event) =>
-						onVoronoiChange('edgeSoftness', readNumber(event, voronoi.edgeSoftness))}
-				/>
-			</label>
-
-			<label class="noise-controls__field">
-				<span class="noise-controls__caption">Point Radius</span>
-				<input
-					class="pixel-input"
-					type="number"
-					min="0.2"
-					max="1.8"
-					step="0.05"
-					value={voronoi.pointRadius}
-					oninput={(event) =>
-						onVoronoiChange('pointRadius', readNumber(event, voronoi.pointRadius))}
-				/>
-			</label>
-
-			<label class="noise-controls__field">
-				<span class="noise-controls__caption">Point Sharpness</span>
-				<input
-					class="pixel-input"
-					type="number"
-					min="0.4"
-					max="4"
-					step="0.05"
-					value={voronoi.pointSharpness}
-					oninput={(event) =>
-						onVoronoiChange('pointSharpness', readNumber(event, voronoi.pointSharpness))}
-				/>
-			</label>
-
-			<label class="noise-controls__field">
-				<span class="noise-controls__caption">Fill Strength</span>
-				<input
-					class="pixel-input"
-					type="number"
-					min="0"
-					max="1"
-					step="0.01"
-					value={voronoi.fillStrength}
-					oninput={(event) =>
-						onVoronoiChange('fillStrength', readNumber(event, voronoi.fillStrength))}
-				/>
-			</label>
-
-			<label class="noise-controls__field">
-				<span class="noise-controls__caption">Cell Variation</span>
-				<input
-					class="pixel-input"
-					type="number"
-					min="0"
-					max="1"
-					step="0.01"
-					value={voronoi.cellVariation}
-					oninput={(event) =>
-						onVoronoiChange('cellVariation', readNumber(event, voronoi.cellVariation))}
-				/>
-			</label>
+			<SliderField
+				label="Cell Density"
+				min={2}
+				max={48}
+				step={1}
+				value={voronoi.cellDensity}
+				onchange={(value) => onVoronoiChange('cellDensity', Math.round(value))}
+			/>
+			<SliderField
+				label="Jitter"
+				min={0}
+				max={1}
+				step={0.01}
+				value={voronoi.jitter}
+				onchange={(value) => onVoronoiChange('jitter', value)}
+			/>
+			<SliderField
+				label="Edge Width"
+				min={0.01}
+				max={0.4}
+				step={0.01}
+				value={voronoi.edgeWidth}
+				onchange={(value) => onVoronoiChange('edgeWidth', value)}
+			/>
+			<SliderField
+				label="Edge Softness"
+				min={0.001}
+				max={0.4}
+				step={0.005}
+				value={voronoi.edgeSoftness}
+				onchange={(value) => onVoronoiChange('edgeSoftness', value)}
+			/>
+			<SliderField
+				label="Point Radius"
+				min={0.2}
+				max={1.8}
+				step={0.05}
+				value={voronoi.pointRadius}
+				onchange={(value) => onVoronoiChange('pointRadius', value)}
+			/>
+			<SliderField
+				label="Point Sharpness"
+				min={0.4}
+				max={4}
+				step={0.05}
+				value={voronoi.pointSharpness}
+				onchange={(value) => onVoronoiChange('pointSharpness', value)}
+			/>
+			<SliderField
+				label="Fill Strength"
+				min={0}
+				max={1}
+				step={0.01}
+				value={voronoi.fillStrength}
+				onchange={(value) => onVoronoiChange('fillStrength', value)}
+			/>
+			<SliderField
+				label="Cell Variation"
+				min={0}
+				max={1}
+				step={0.01}
+				value={voronoi.cellVariation}
+				onchange={(value) => onVoronoiChange('cellVariation', value)}
+			/>
 		</div>
 	</Section>
 {/if}
@@ -382,7 +281,7 @@
 
 	.noise-controls__grid {
 		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
+		grid-template-columns: minmax(0, 1fr);
 		gap: var(--space-3);
 	}
 
@@ -395,19 +294,6 @@
 
 	.noise-controls__hint--compact {
 		margin-top: 0;
-	}
-
-	.noise-controls__field {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2);
-	}
-
-	.noise-controls__caption {
-		color: var(--color-fg-secondary);
-		font-size: var(--font-size-1);
-		text-transform: uppercase;
-		letter-spacing: 0.08em;
 	}
 
 	.noise-controls__list {

@@ -350,8 +350,13 @@ export default definition;
 2. **状态驱动渲染**
    使用 Svelte 5 的 `$effect`。你从父组件传递 `noiseScale` 等 prop；子组件只管监听 prop。只要 prop 变化了，立刻触发 `pixiApp.renderer.render(pixiApp.stage)` 或者是更新着色器的 uniform。
 
-3. **释放资源**
-   在 `onMount` 返还的清空函数中，必须调用 `pixiApp.destroy(true)` 以回收 WebGL Context 并清理节点，否则多次切换 Tab 或重渲染会导致内存泄漏。
+3. **区分“隐藏”与“销毁”**
+	当前 workspace 采用 keep-alive tab session。切换到别的 tab 时，Pixi 组件通常只是进入隐藏态，并不会立刻卸载；真正卸载发生在用户关闭该 tab 时。所以 `onMount` 返还的清理函数依然必须调用 `pixiApp.destroy(true)`，但它对应的是“会话销毁”，不是普通 tab 切换。
 
-4. **处理导出操作的通信**
+	如果你的 Pixi tool 在隐藏标签中需要暂停 ticker、render loop 或高频重算，请读取 `getToolSessionContext()` 暴露的 `isActive()`，在非活动态跳过刷新，在重新激活时恢复，而不是依赖切 tab 自动 destroy。
+
+4. **释放资源**
+	在 `onMount` 返还的清空函数中，必须调用 `pixiApp.destroy(true)` 以回收 WebGL Context 并清理节点，否则真正关闭 tab、组件重建或异常重挂载后会导致内存泄漏。
+
+5. **处理导出操作的通信**
    为了导出生成结果，你可以传入一个 `onExport` 函数回调，或者像本例一样传递一个 `$state` 开关变量，通过 `$effect` 捕捉开关的变化，从而在挂载有 PIXI 实例的组件里去提取 `.base64()` 数据。
