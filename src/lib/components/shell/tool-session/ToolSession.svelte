@@ -5,9 +5,15 @@
 	import { ToolShell } from '../tool-shell/index.js';
 	import { loadTechStacks } from '$lib/runtime/tech-stack';
 	import { loadToolDefinition } from '$lib/runtime/tool-registry';
+	import {
+		dispatchToolMenuAction,
+		setToolRuntimeContext,
+		type ToolRuntimeContextValue
+	} from '$lib/runtime/tool-runtime-context';
 	import { setToolSessionContext } from '$lib/runtime/tool-session-context';
 	import { setToolShellContext, type ToolShellContextValue } from '$lib/runtime/tool-shell-context';
 	import type { ToolDefinition } from '$lib/types/tool';
+	import type { TechStackKey, TechStackModule, TechStackModuleMap } from '$lib/types/tech-stack';
 
 	const EMPTY_TOOL_METADATA = {
 		name: '',
@@ -38,6 +44,8 @@
 	let loadLogs = $state<LoadLogEntry[]>([]);
 	let definition = $state<ToolDefinition | null>(null);
 	let SessionComponent = $state<Component<any> | null>(null);
+	let declaredTechStacks = $state<readonly TechStackKey[]>([]);
+	let loadedTechStacks = $state<Partial<TechStackModuleMap>>({});
 	let reloadToken = $state(0);
 	let loadVersion = 0;
 	let nextLoadLogId = 0;
@@ -55,8 +63,22 @@
 		onMenuAction: () => {}
 	});
 
+	const toolRuntimeContext = $state<ToolRuntimeContextValue>({
+		toolId: '',
+		metadata: EMPTY_TOOL_METADATA,
+		isActive: () => isActive,
+		menuActions: [],
+		declaredTechStacks: [],
+		loadedTechStacks: {},
+		getLoadedTechStack: (key) => loadedTechStacks[key] as TechStackModule<typeof key> | undefined,
+		dispatchMenuAction: (actionId) => {
+			dispatchToolMenuAction(definition, toolRuntimeContext, actionId);
+		}
+	});
+
 	setToolSessionContext(toolSessionContext);
 	setToolShellContext(toolShellContext);
+	setToolRuntimeContext(toolRuntimeContext);
 
 	function retryLoad() {
 		reloadToken += 1;
@@ -79,12 +101,28 @@
 
 	$effect(() => {
 		const nextDefinition = definition;
-		toolShellContext.metadata = nextDefinition?.metadata ?? EMPTY_TOOL_METADATA;
-		toolShellContext.menuActions = nextDefinition?.menuActions ?? [];
+		const nextMetadata = nextDefinition?.metadata ?? EMPTY_TOOL_METADATA;
+		const nextMenuActions = nextDefinition?.menuActions ?? [];
+
+		toolRuntimeContext.toolId = toolId;
+		toolRuntimeContext.metadata = nextMetadata;
+		toolRuntimeContext.menuActions = nextMenuActions;
+		toolRuntimeContext.declaredTechStacks = declaredTechStacks;
+		toolRuntimeContext.loadedTechStacks = loadedTechStacks;
+		toolRuntimeContext.getLoadedTechStack = (key) =>
+			loadedTechStacks[key] as TechStackModule<typeof key> | undefined;
+		toolRuntimeContext.dispatchMenuAction = (actionId) => {
+			dispatchToolMenuAction(nextDefinition, toolRuntimeContext, actionId);
+		};
+
+		toolShellContext.metadata = nextMetadata;
+		toolShellContext.menuActions = nextMenuActions;
 		toolShellContext.openAbout = () => {
 			aboutDialogOpen = true;
 		};
-		toolShellContext.onMenuAction = () => {};
+		toolShellContext.onMenuAction = (actionId) => {
+			toolRuntimeContext.dispatchMenuAction(actionId);
+		};
 	});
 
 	$effect(() => {
@@ -108,6 +146,8 @@
 		loadLogs = [];
 		definition = null;
 		SessionComponent = null;
+		declaredTechStacks = [];
+		loadedTechStacks = {};
 		nextLoadLogId = 0;
 
 		void (async () => {
@@ -116,13 +156,15 @@
 				const nextDefinition = await loadToolDefinition(toolId);
 				appendLoadLog('Runtime definition loaded.', 'success');
 
-				const declaredTechStacks = nextDefinition.techStack ?? [];
+				const nextDeclaredTechStacks = nextDefinition.techStack ?? [];
+				declaredTechStacks = nextDeclaredTechStacks;
 
-				if (declaredTechStacks.length > 0) {
+				if (nextDeclaredTechStacks.length > 0) {
 					appendLoadLog('Loading declared tech stacks...');
-					await loadTechStacks(declaredTechStacks);
+					loadedTechStacks = await loadTechStacks(nextDeclaredTechStacks);
 					appendLoadLog('Declared tech stacks loaded.', 'success');
 				} else {
+					loadedTechStacks = {};
 					appendLoadLog('No declared tech stacks to load.', 'success');
 				}
 

@@ -1,5 +1,5 @@
 import type { Component } from 'svelte';
-import type { TechStackKey } from './tech-stack';
+import type { TechStackKey, TechStackModule, TechStackModuleMap } from './tech-stack';
 
 export type { TechStackKey } from './tech-stack';
 
@@ -29,9 +29,19 @@ export interface ToolMenuAction {
 	disabled?: boolean;
 }
 
+export interface ToolMenuActionContext {
+	toolId: string;
+	metadata: ToolMetadata;
+	isActive: () => boolean;
+	declaredTechStacks: readonly TechStackKey[];
+	loadedTechStacks: Readonly<Partial<TechStackModuleMap>>;
+	getLoadedTechStack: <Key extends TechStackKey>(key: Key) => TechStackModule<Key> | undefined;
+}
+
 export interface ToolDefinition {
 	metadata: ToolMetadata;
 	menuActions?: ToolMenuAction[];
+	onMenuAction?: (actionId: string, context: ToolMenuActionContext) => void;
 	techStack?: TechStackKey[];
 	loadComponent: () => Promise<{ default: Component<any> }>;
 }

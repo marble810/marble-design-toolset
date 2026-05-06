@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { getCanvasExportContext } from '$lib/runtime/canvas-export/context';
-	import { getToolSessionContext } from '$lib/runtime/tool-session-context';
-	import { loadTechStack } from '$lib/runtime/tech-stack';
+	import {
+		createRenderHostLifecycle,
+		createThreeRenderHost
+	} from '$lib/runtime/render-host/index.js';
 	import {
 		createInitMapSourceKey,
 		type InitMapSourceMode,
@@ -23,14 +24,13 @@
 
 	let { initMapSource, sourceMode, parameters, resimulateToken }: Props = $props();
 
-	const exportContext = getCanvasExportContext();
-	const toolSessionContext = getToolSessionContext();
+	const renderHost = createRenderHostLifecycle();
 
 	let canvasElement = $state<HTMLCanvasElement | null>(null);
-	let isReady = $state(false);
+	const isReady = $derived(renderHost.isReady);
 	let isLoadingMap = $state(false);
-	let errorMessage = $state('');
-	let isSessionActive = $derived(toolSessionContext?.isActive() ?? true);
+	let loadErrorMessage = $state('');
+	const errorMessage = $derived(renderHost.errorMessage || loadErrorMessage);
 
 	let THREE: ThreeModule | null = null;
 	let previewRenderer: ShallowWaterWaveRenderer | null = null;
@@ -78,7 +78,7 @@
 
 		const version = ++loadVersion;
 		isLoadingMap = true;
-		errorMessage = '';
+		loadErrorMessage = '';
 
 		void (async () => {
 			try {
@@ -93,7 +93,7 @@
 				exportFrame = -1;
 			} catch (error) {
 				if (version !== loadVersion) return;
-				errorMessage = error instanceof Error ? error.message : 'Failed to read init map.';
+				loadErrorMessage = error instanceof Error ? error.message : 'Failed to read init map.';
 			} finally {
 				if (version === loadVersion) {
 					isLoadingMap = false;
@@ -154,19 +154,19 @@
 	}
 
 	onMount(() => {
-		let disposed = false;
-		let animationFrame = 0;
-		let unregisterExporter: (() => void) | undefined;
+		void renderHost.runInit(async () => {
+			const threeHost = await createThreeRenderHost(renderHost);
+			if (renderHost.isDisposed) return;
+			if (!canvasElement) {
+				throw new Error('Preview canvas is unavailable.');
+			}
 
-		void (async () => {
-			try {
-				THREE = await loadTechStack('three');
-				if (disposed || !canvasElement) return;
+			THREE = threeHost.THREE;
+			previewRenderer = new ShallowWaterWaveRenderer(THREE, canvasElement, parameters.resolution);
+			previewResolution = parameters.resolution;
 
-				previewRenderer = new ShallowWaterWaveRenderer(THREE, canvasElement, parameters.resolution);
-				previewResolution = parameters.resolution;
-
-				unregisterExporter = exportContext?.register({
+			renderHost.registerRenderExporter(
+				{
 					kind: 'render',
 					get contentWidth() {
 						return parameters.resolution;
@@ -178,40 +178,30 @@
 						await renderExportFrame(canvas, frameIndex);
 					},
 					capabilities: {
-						png: false,
+						png: true,
 						mp4: true
 					}
-				});
+				},
+				{ id: 'simulation-video', label: 'Simulation Video' }
+			);
 
-				isReady = true;
-			} catch (error) {
-				errorMessage = error instanceof Error ? error.message : 'Failed to initialize Three preview.';
-			}
-		})();
+			renderHost.addCleanup(() => {
+				previewRenderer?.dispose();
+				exportRenderer?.dispose();
+				previewRenderer = null;
+				exportRenderer = null;
+				exportRenderCanvas = null;
+				previewInitialData = null;
+				exportInitialData = null;
+			});
+		}, 'Failed to initialize Three preview.');
 
-		function animate() {
-			if (disposed) return;
-			if (isSessionActive && previewRenderer && previewInitialData) {
+		renderHost.startAnimationLoop(() => {
+			if (previewRenderer && previewInitialData) {
 				previewRenderer.advanceFrames(1, parameters);
 				previewRenderer.render(parameters);
 			}
-			animationFrame = requestAnimationFrame(animate);
-		}
-
-		animationFrame = requestAnimationFrame(animate);
-
-		return () => {
-			disposed = true;
-			cancelAnimationFrame(animationFrame);
-			unregisterExporter?.();
-			previewRenderer?.dispose();
-			exportRenderer?.dispose();
-			previewRenderer = null;
-			exportRenderer = null;
-			exportRenderCanvas = null;
-			previewInitialData = null;
-			exportInitialData = null;
-		};
+		});
 	});
 </script>
 

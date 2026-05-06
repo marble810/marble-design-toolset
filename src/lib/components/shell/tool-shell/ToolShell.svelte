@@ -15,7 +15,7 @@
 		get exporters() {
 			return canvasExportRegistry.exporters;
 		},
-		register: (descriptor) => canvasExportRegistry.register(descriptor)
+		register: (descriptor, options) => canvasExportRegistry.register(descriptor, options)
 	});
 </script>
 

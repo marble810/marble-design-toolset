@@ -44,11 +44,14 @@ function renderSharedLeftPanel({ toolId, displayName, starterLabel, techStackLab
 	</Section>
 
 	<Section title="Starter" collapsible>
-		<ul class="${toolId}__list">
-			<li>Starter type: ${starterLabel}</li>
-			<li>Declared tech stacks: ${techStackLabel}</li>
-			<li>Replace the placeholder component with your tool UI.</li>
-		</ul>
+		<div class="${toolId}__fields">
+			<Field label="Starter Type">
+				<p class="${toolId}__copy">${starterLabel}</p>
+			</Field>
+			<Field label="Declared Tech Stacks">
+				<p class="${toolId}__copy">${techStackLabel}</p>
+			</Field>
+		</div>
 	</Section>
 </LeftPanel>`;
 }
@@ -60,13 +63,10 @@ function renderSharedStyle(toolId) {
 		color: var(--color-fg-secondary);
 	}
 
-	.${toolId}__list {
-		margin: 0;
-		padding-left: 18px;
+	.${toolId}__fields {
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-2);
-		color: var(--color-fg-secondary);
 	}
 </style>`;
 }
@@ -78,6 +78,7 @@ export function renderPreviewMasterComponent({ toolId, componentName, displayNam
 
 	return withTrailingNewline(`<script lang="ts">
 	import { LeftPanel, PreviewCanvas, RightPanel, Section } from '$lib/components/shell/index.js';
+	import { Field } from '$lib/components/ui/index.js';
 	import ${childComponentName} from './components/${childComponentName}.svelte';
 </script>
 
@@ -106,6 +107,7 @@ export function renderStageMasterComponent({ toolId, componentName, displayName,
 
 	return withTrailingNewline(`<script lang="ts">
 	import { FullStage, LeftPanel, RightPanel, Section } from '$lib/components/shell/index.js';
+	import { Field } from '$lib/components/ui/index.js';
 	import ${childComponentName} from './components/${childComponentName}.svelte';
 </script>
 
@@ -183,13 +185,39 @@ export function renderStageComponent({ toolId, displayName, techStacks }) {
 	const childClass = `${toolId}-stage`;
 	const techStackLabel = techStacks.length ? techStacks.join(', ') : 'None';
 
-	return withTrailingNewline(`<div class="${childClass}">
+	return withTrailingNewline(`<script lang="ts">
+	import { onMount } from 'svelte';
+	import { createRenderHostLifecycle } from '$lib/runtime/render-host/index.js';
+
+	const renderHost = createRenderHostLifecycle();
+	let hostElement = $state<HTMLDivElement | null>(null);
+	const isReady = $derived(renderHost.isReady);
+	const errorMessage = $derived(renderHost.errorMessage);
+
+	onMount(() => {
+		void renderHost.runInit(() => {
+			if (!hostElement) {
+				throw new Error('Stage host is unavailable.');
+			}
+		}, 'Failed to initialize stage host.');
+	});
+</script>
+
+<div class="${childClass}" bind:this={hostElement}>
 	<div class="${childClass}__hud">
 		<div class="${childClass}__badge">Stage Starter</div>
 		<h2 class="${childClass}__title">${displayName}</h2>
 		<p class="${childClass}__description">Attach your render host, canvas, or scene inside this full-bleed stage.</p>
 		<p class="${childClass}__meta">Declared tech stacks: ${techStackLabel}</p>
 	</div>
+
+	{#if !isReady && !errorMessage}
+		<div class="${childClass}__overlay">Preparing render host...</div>
+	{/if}
+
+	{#if errorMessage}
+		<div class="${childClass}__overlay ${childClass}__overlay--error">{errorMessage}</div>
+	{/if}
 </div>
 
 <style>
@@ -246,6 +274,20 @@ export function renderStageComponent({ toolId, displayName, techStacks }) {
 		font-size: var(--font-size-1);
 		text-transform: uppercase;
 		letter-spacing: 0.08em;
+	}
+
+	.${childClass}__overlay {
+		position: absolute;
+		inset: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: rgba(8, 12, 20, 0.82);
+		color: var(--color-fg-secondary);
+	}
+
+	.${childClass}__overlay--error {
+		color: var(--color-danger);
 	}
 </style>
 `);

@@ -73,7 +73,7 @@ export default definition;
 1. **主组件**：维护参数 `$state`，组合 `LeftPanel` 与 `RightPanel`，把参数以 props 推到 Pixi 子组件。
 2. **右侧舞台**：用 `PreviewCanvas` 提供固定宽高的画布区域；Pixi 子组件作为 PreviewCanvas 的 children。
 3. **参数同步**：在 Pixi 子组件用 `$effect` 监听 props 变化并调用 Pixi 实例方法。
-4. **生命周期**：`onMount` 内异步初始化、`onMount` 返回函数中 `destroy()`。
+4. **生命周期**：使用 `createRenderHostLifecycle` 与 `createPixiApplicationHost` 管理初始化、session active、导出注册和销毁。
 
 ---
 
@@ -84,7 +84,6 @@ export default definition;
 ```svelte
 <script lang="ts">
 	import { LeftPanel, PreviewCanvas, RightPanel, Section } from '$lib/components/shell/index.js';
-	import { Button } from '$lib/components/ui/button/index.js';
 	// 引入我们将要编写的 Pixi 画布组件
 	import PixiCanvas from './components/PixiCanvas.svelte';
 
@@ -95,16 +94,6 @@ export default definition;
 	let noiseScale = $state(1.0);
 	let colorA = $state('#000000');
 	let colorB = $state('#ffffff');
-	
-	// ==========================================
-	// 状态：导出与通信
-	// ==========================================
-	let exportRequested = $state(false);
-	
-	function handleExport() {
-		// 切换这个标志位，触发子组件监听
-		exportRequested = !exportRequested;
-	}
 </script>
 
 <LeftPanel>
@@ -136,9 +125,6 @@ export default definition;
 		</div>
 	</Section>
 
-	<Section title="Actions" collapsible>
-		<Button variant="solid" size="md" onclick={handleExport}>Export as PNG</Button>
-	</Section>
 </LeftPanel>
 
 <RightPanel>
@@ -152,7 +138,6 @@ export default definition;
 			{noiseScale}
 			{colorA}
 			{colorB}
-			{exportRequested}
 		/>
 	</PreviewCanvas>
 </RightPanel>
@@ -178,12 +163,12 @@ export default definition;
 ```svelte
 <script lang="ts">
 	import { onMount } from 'svelte';
-	// 从运行时获取加载器
-	import { loadTechStack } from '$lib/runtime/tech-stack';
-	import type { TechStackModule } from '$lib/types/tech-stack';
+	import {
+		createPixiApplicationHost,
+		createRenderHostLifecycle
+	} from '$lib/runtime/render-host/index.js';
 	import type { Application } from 'pixi.js';
 
-	type PixiModule = TechStackModule<'pixi'>;
 	type PixiApp = Application;
 
 	// ==========================================
@@ -195,16 +180,16 @@ export default definition;
 		noiseScale: number;
 		colorA: string;
 		colorB: string;
-		exportRequested: boolean;
 	}
-	let { width, height, noiseScale, colorA, colorB, exportRequested }: Props = $props();
+	let { width, height, noiseScale, colorA, colorB }: Props = $props();
 
 	// ==========================================
 	// 组件及库状态
 	// ==========================================
+	const renderHost = createRenderHostLifecycle();
 	let hostElement = $state<HTMLDivElement | null>(null);
-	let isReady = $state(false);
-	let errorMessage = $state('');
+	const isReady = $derived(renderHost.isReady);
+	const errorMessage = $derived(renderHost.errorMessage);
 
 	// 保存 Pixi 应用实例以便能在 prop 变化时调用
 	let pixiApp: PixiApp | null = null;
@@ -219,82 +204,50 @@ export default definition;
 		}
 	});
 
-	// 监听导出请求
-	$effect(() => {
-		if (exportRequested && isReady && pixiApp) {
-			// 由于框架保证组件会被重新执行 effect，直接执行导出逻辑
-			doExport();
-		}
-	});
-
 	function updatePixiRender(w: number, h: number, scale: number, ca: string, cb: string) {
 		if (!pixiApp) return;
 		pixiApp.renderer.resize(w, h);
 		// TODO: 更新 Pixi Filter / Sprite / Graphic 参数
 	}
 
-	async function doExport() {
-		if (!pixiApp) return;
-		try {
-			// 依赖 PIXI 机制获取 Canvas 的 Blob 或 dataURL
-			const base64 = await pixiApp.renderer.extract.base64(pixiApp.stage);
-			// 执行下载
-			const a = document.createElement('a');
-			a.download = 'noise.png';
-			a.href = base64;
-			a.click();
-		} catch (err) {
-			console.error('Export failed:', err);
-		}
-	}
-
 	// ==========================================
 	// 初始化生命周期
 	// ==========================================
 	onMount(() => {
-		let disposed = false;
+		void renderHost.runInit(async () => {
+			if (!hostElement) {
+				throw new Error('Pixi host is unavailable.');
+			}
 
-		void (async () => {
-			try {
-				// 获取预加载好的 PIXI，因为 index.ts 中声明了，此时应该瞬间返回
-				const PIXI: PixiModule = await loadTechStack('pixi');
-
-				if (disposed || !hostElement) return;
-
-				// 创建 Pixi 应用，背景通常设置为透明，因为 PreviewCanvas 有棋盘格
-				pixiApp = new PIXI.Application();
-				await pixiApp.init({
+			const pixiHost = await createPixiApplicationHost(renderHost, {
+				hostElement,
+				init: {
 					width,
 					height,
 					backgroundAlpha: 0, 
 					resolution: window.devicePixelRatio || 1,
 					autoDensity: true // 处理高分屏表现
-				});
-				
-				// 将 Canvas 丢进 DOM
-				hostElement.replaceChildren(pixiApp.canvas);
+				}
+			});
+			pixiApp = pixiHost.app;
 
-				// TODO: 在这里添加最初的 Sprite、滤镜或 Mesh 逻辑
-				// const sprite = new PIXI.Sprite(...)
-				// pixiApp.stage.addChild(sprite)
+			// TODO: 在这里添加最初的 Sprite、滤镜或 Mesh 逻辑
+			// const sprite = new PIXI.Sprite(...)
+			// pixiApp.stage.addChild(sprite)
 
-				isReady = true;
+			renderHost.registerCanvasExporter(
+				{
+					kind: 'canvas',
+					get contentWidth() { return width; },
+					get contentHeight() { return height; },
+					getCanvas: () => pixiApp?.canvas ?? null
+				},
+				{ id: 'pixi-canvas', label: 'Pixi Canvas' }
+			);
 
-				// 主动调一次渲染刷新以应用初始参数
-				updatePixiRender(width, height, noiseScale, colorA, colorB);
-
-			} catch (error) {
-				errorMessage = error instanceof Error ? error.message : 'Failed to initialize Pixi.js.';
-			}
-		})();
-
-		return () => {
-			disposed = true;
-			if (pixiApp) {
-				pixiApp.destroy(true, { children: true, texture: true, baseTexture: true });
-			}
-			hostElement?.replaceChildren();
-		};
+			// 主动调一次渲染刷新以应用初始参数
+			updatePixiRender(width, height, noiseScale, colorA, colorB);
+		}, 'Failed to initialize Pixi.js.');
 	});
 </script>
 
@@ -353,10 +306,10 @@ export default definition;
 3. **区分“隐藏”与“销毁”**
 	当前 workspace 采用 keep-alive tab session。切换到别的 tab 时，Pixi 组件通常只是进入隐藏态，并不会立刻卸载；真正卸载发生在用户关闭该 tab 时。所以 `onMount` 返还的清理函数依然必须调用 `pixiApp.destroy(true)`，但它对应的是“会话销毁”，不是普通 tab 切换。
 
-	如果你的 Pixi tool 在隐藏标签中需要暂停 ticker、render loop 或高频重算，请读取 `getToolSessionContext()` 暴露的 `isActive()`，在非活动态跳过刷新，在重新激活时恢复，而不是依赖切 tab 自动 destroy。
+	如果你的 Pixi tool 在隐藏标签中需要暂停 ticker、render loop 或高频重算，请使用 `createRenderHostLifecycle()` 的 `startAnimationLoop(...)`，它会在非活动态暂停回调，在重新激活时恢复。
 
 4. **释放资源**
-	在 `onMount` 返还的清空函数中，必须调用 `pixiApp.destroy(true)` 以回收 WebGL Context 并清理节点，否则真正关闭 tab、组件重建或异常重挂载后会导致内存泄漏。
+	使用 `createPixiApplicationHost(renderHost, ...)` 时，framework helper 会在 lifecycle dispose 时调用 `app.destroy(...)` 并清理宿主节点。如果你仍然手写 Pixi 初始化，必须在清理函数中调用 `pixiApp.destroy(...)` 以回收 WebGL Context。
 
-5. **处理导出操作的通信**
-   为了导出生成结果，你可以传入一个 `onExport` 函数回调，或者像本例一样传递一个 `$state` 开关变量，通过 `$effect` 捕捉开关的变化，从而在挂载有 PIXI 实例的组件里去提取 `.base64()` 数据。
+5. **处理导出**
+   不要在 Pixi tool 内手写 `base64`、Blob 下载或隐藏 `<a>` 标签。需要导出时，在 `metadata.json` 声明 `export` 能力，并使用 `renderHost.registerCanvasExporter(...)` 注册 Pixi canvas；Export Section、编码、文件名和下载都由 framework 负责。

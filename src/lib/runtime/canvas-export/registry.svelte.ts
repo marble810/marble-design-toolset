@@ -1,5 +1,6 @@
 import type {
 	CanvasExporterDescriptor,
+	CanvasExporterRegistrationOptions,
 	RegisteredExporter,
 	ResolvedCapabilities
 } from '$lib/types/canvas-export';
@@ -40,22 +41,87 @@ export function resolveCapabilities(descriptor: CanvasExporterDescriptor): Resol
 
 export interface CanvasExportRegistry {
 	readonly exporters: ReadonlyArray<RegisteredExporter>;
-	register: (descriptor: CanvasExporterDescriptor) => () => void;
+	register: (
+		descriptor: CanvasExporterDescriptor,
+		options?: CanvasExporterRegistrationOptions
+	) => () => void;
+}
+
+export function createRegisteredExporterEntry(
+	descriptor: CanvasExporterDescriptor,
+	options: CanvasExporterRegistrationOptions,
+	sequence: number,
+	existingIds: readonly string[] = []
+): RegisteredExporter {
+	const fallbackId = `exporter-${sequence}`;
+	const baseId = normalizeExporterId(options.id) ?? fallbackId;
+	const id = createUniqueExporterId(baseId, existingIds);
+	const label = normalizeExporterLabel(options.label) ?? createDefaultExporterLabel(descriptor, sequence);
+
+	return {
+		id,
+		label,
+		descriptor,
+		resolved: resolveCapabilities(descriptor)
+	};
+}
+
+function normalizeExporterId(value: string | undefined): string | null {
+	const normalized = value
+		?.trim()
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, '-')
+		.replace(/^-+|-+$/g, '');
+	return normalized || null;
+}
+
+function normalizeExporterLabel(value: string | undefined): string | null {
+	const normalized = value?.trim();
+	return normalized || null;
+}
+
+function createUniqueExporterId(baseId: string, existingIds: readonly string[]): string {
+	if (!existingIds.includes(baseId)) return baseId;
+	let suffix = 2;
+	let nextId = `${baseId}-${suffix}`;
+	while (existingIds.includes(nextId)) {
+		suffix += 1;
+		nextId = `${baseId}-${suffix}`;
+	}
+	return nextId;
+}
+
+function createDefaultExporterLabel(descriptor: CanvasExporterDescriptor, sequence: number): string {
+	const kindLabel = descriptor.kind === 'dom' ? 'DOM' : descriptor.kind === 'render' ? 'Render' : 'Canvas';
+	return `${kindLabel} ${sequence}`;
+}
+
+export function removeRegisteredExporter(
+	exporters: readonly RegisteredExporter[],
+	exporterId: string
+): RegisteredExporter[] {
+	return exporters.filter((existing) => existing.id !== exporterId);
 }
 
 export function createCanvasExportRegistry(): CanvasExportRegistry {
 	let exporters = $state<RegisteredExporter[]>([]);
 	let nextId = 0;
 
-	function register(descriptor: CanvasExporterDescriptor): () => void {
+	function register(
+		descriptor: CanvasExporterDescriptor,
+		options: CanvasExporterRegistrationOptions = {}
+	): () => void {
 		nextId += 1;
-		const id = `exporter-${nextId}`;
-		const resolved = resolveCapabilities(descriptor);
-		const entry: RegisteredExporter = { id, descriptor, resolved };
+		const entry = createRegisteredExporterEntry(
+			descriptor,
+			options,
+			nextId,
+			exporters.map((exporter) => exporter.id)
+		);
 		exporters = [...exporters, entry];
 
 		return () => {
-			exporters = exporters.filter((existing) => existing.id !== id);
+			exporters = removeRegisteredExporter(exporters, entry.id);
 		};
 	}
 

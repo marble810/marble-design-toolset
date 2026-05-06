@@ -323,7 +323,7 @@
 	<ul class="shallow-controls__list">
 		<li>Preview frame: {parameters.resolution} x {parameters.resolution} px</li>
 		<li>Boundary: absorbing edge, no reflection</li>
-		<li>Export: MP4/WebM via framework</li>
+		<li>Export: PNG and MP4/WebM via framework</li>
 	</ul>
 </Section>
 

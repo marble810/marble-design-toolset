@@ -3,19 +3,17 @@
 	import { LeftPanel, RightPanel, PreviewCanvas, Section } from '$lib/components/shell/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { SliderField } from '$lib/components/ui/slider-field/index.js';
-	import {
-		createFileInputController,
-		extractDroppedFiles
-	} from '$lib/runtime/file-input/index.js';
+	import { DropZone, SourceInputSection } from '$lib/components/tool-io/index.js';
+	import { createToolSourceInput } from '$lib/runtime/io/index.js';
 	import AberrationCanvas from './components/AberrationCanvas.svelte';
 
 	// ──────────────────────────────────────────────────────────────────────────
 	// File input
 	// ──────────────────────────────────────────────────────────────────────────
-	const fileInput = createFileInputController({ allowedKinds: ['image', 'video'] });
-	onDestroy(() => fileInput.dispose());
+	const sourceInput = createToolSourceInput({ allowedKinds: ['image', 'video'] });
+	onDestroy(() => sourceInput.dispose());
 
-	const sourceItem = $derived(fileInput.currentItem);
+	const sourceItem = $derived(sourceInput.currentItem);
 	const objectUrl = $derived(
 		sourceItem?.kind === 'image' || sourceItem?.kind === 'video'
 			? sourceItem.objectUrl
@@ -83,31 +81,6 @@
 	let intensity = $state(1.0);
 
 	// ──────────────────────────────────────────────────────────────────────────
-	// Drop-zone state
-	// ──────────────────────────────────────────────────────────────────────────
-	let isDragOver = $state(false);
-
-	function handleDragOver(event: DragEvent) {
-		event.preventDefault();
-		isDragOver = true;
-	}
-
-	function handleDragLeave(event: DragEvent) {
-		// Only clear when leaving the outer drop zone, not an inner child
-		const target = event.relatedTarget as Node | null;
-		const current = event.currentTarget as HTMLElement;
-		if (!target || !current.contains(target)) {
-			isDragOver = false;
-		}
-	}
-
-	function handleDrop(event: DragEvent) {
-		event.preventDefault();
-		isDragOver = false;
-		void fileInput.ingestFiles(extractDroppedFiles(event), 'drop');
-	}
-
-	// ──────────────────────────────────────────────────────────────────────────
 	// Helpers
 	// ──────────────────────────────────────────────────────────────────────────
 	function resetAll() {
@@ -129,29 +102,10 @@
 </script>
 
 <LeftPanel>
-	<!-- ── Source ───────────────────────────────────────────────────────────── -->
-	<Section title="Source">
-		<div class="ca__source">
-			{#if sourceItem}
-				<div class="ca__source-info">
-					<span class="ca__source-name">{sourceItem.name}</span>
-					<span class="ca__source-meta">{sourceWidth} × {sourceHeight} px</span>
-				</div>
-				<div class="ca__source-actions">
-					<Button variant="ghost" size="sm" onclick={() => void fileInput.pick()}>Replace</Button>
-					<Button variant="ghost" size="sm" onclick={() => fileInput.clear()}>Clear</Button>
-				</div>
-			{:else}
-				<p class="ca__source-hint">
-					Drop an image or video onto the preview, or browse to load one.
-				</p>
-				<Button variant="outline" size="sm" onclick={() => void fileInput.pick()}>Browse…</Button>
-			{/if}
-			{#if fileInput.lastError}
-				<p class="ca__source-error">{fileInput.lastError.message}</p>
-			{/if}
-		</div>
-	</Section>
+	<SourceInputSection
+		source={sourceInput}
+		emptyHint="Drop an image or video onto the preview, or browse to load one."
+	/>
 
 	<!-- ── Lens Warp ────────────────────────────────────────────────────────── -->
 	<Section title="Lens Warp">
@@ -297,15 +251,10 @@
 </LeftPanel>
 
 <RightPanel>
-	<!-- Drop zone covers the whole right area -->
-	<div
+	<DropZone
+		source={sourceInput}
+		ariaLabel="Drop image or video to load"
 		class="ca__drop-zone"
-		class:ca__drop-zone--active={isDragOver}
-		ondragover={handleDragOver}
-		ondragleave={handleDragLeave}
-		ondrop={handleDrop}
-		role="region"
-		aria-label="Drop image or video to load"
 	>
 		<PreviewCanvas
 			contentWidth={resolvedWidth}
@@ -335,55 +284,10 @@
 				onResolvedSize={handleResolvedSize}
 			/>
 		</PreviewCanvas>
-	</div>
+	</DropZone>
 </RightPanel>
 
 <style>
-	/* ── Source section ───────────────────────────────────────────────────── */
-	.ca__source {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-3);
-		padding: var(--space-1) 0;
-	}
-
-	.ca__source-info {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1);
-	}
-
-	.ca__source-name {
-		font-size: var(--font-size-1);
-		color: var(--color-fg-primary);
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.ca__source-meta {
-		font-size: var(--font-size-0);
-		color: var(--color-fg-muted);
-	}
-
-	.ca__source-actions {
-		display: flex;
-		gap: var(--space-2);
-	}
-
-	.ca__source-hint {
-		margin: 0;
-		font-size: var(--font-size-1);
-		color: var(--color-fg-muted);
-		line-height: 1.4;
-	}
-
-	.ca__source-error {
-		margin: 0;
-		font-size: var(--font-size-1);
-		color: var(--color-danger);
-	}
-
 	/* ── Controls ─────────────────────────────────────────────────────────── */
 	.ca__controls {
 		display: flex;
@@ -407,7 +311,7 @@
 	}
 
 	/* ── Right area / drop zone ────────────────────────────────────────────── */
-	.ca__drop-zone {
+	:global(.ca__drop-zone) {
 		/* Must behave as a flex child that fills RightPanel, then as a flex
 		   container so PreviewCanvas (flex: 1 1 auto) can fill the remaining space */
 		flex: 1 1 auto;
@@ -418,13 +322,4 @@
 		position: relative;
 	}
 
-	.ca__drop-zone--active::after {
-		content: '';
-		position: absolute;
-		inset: 4px;
-		border: 2px dashed var(--color-accent, #9580ff);
-		border-radius: 4px;
-		pointer-events: none;
-		z-index: 10;
-	}
 </style>

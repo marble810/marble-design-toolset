@@ -1,18 +1,4 @@
-/** Trigger a browser download for a Blob with the given filename. */
-export function triggerDownload(blob: Blob, filename: string): void {
-	if (typeof document === 'undefined') {
-		return;
-	}
-	const url = URL.createObjectURL(blob);
-	const anchor = document.createElement('a');
-	anchor.href = url;
-	anchor.download = filename;
-	document.body.appendChild(anchor);
-	anchor.click();
-	anchor.remove();
-	// Defer revoke so the browser has a chance to start the download stream.
-	setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
+export { triggerDownload } from '../io/download.ts';
 
 const PAD2 = (n: number) => (n < 10 ? `0${n}` : `${n}`);
 

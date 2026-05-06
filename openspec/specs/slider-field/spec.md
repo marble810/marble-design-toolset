@@ -1,4 +1,9 @@
-## ADDED Requirements
+# slider-field Specification
+
+## Purpose
+定义共享 SliderField 组件的滑块、数值输入、软硬限制与编辑草稿同步语义，供工具左侧面板复用。
+
+## Requirements
 
 ### Requirement: SliderField 提供滑块与数值输入的复合交互
 

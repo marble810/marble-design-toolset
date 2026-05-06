@@ -19,7 +19,6 @@
 
 ### New Capabilities
 
-- `tool-workflow-ui`: 定义 tool 左侧面板中可复用的 workflow UI，包括 Source input、drop zone、field wrapper、select/checkbox/segmented control、preset grid 与错误/提示展示。
 - `tool-io`: 定义 tool 调用层的一体化 IO 模块，包括文件来源 controller facade、SourceInputSection/DropZone 绑定、文件摘要、错误展示、object URL 生命周期和下载 primitive。
 - `tool-workflow-ui`: 定义 tool 左侧面板中可复用的参数 workflow UI，包括 field wrapper、select/checkbox/segmented control、preset grid 与错误/提示展示。
 - `render-host-lifecycle`: 定义 Pixi、Three、Canvas2D 等渲染 host 的 session-aware 生命周期 helper，覆盖初始化、暂停/恢复、resize、销毁和 exporter 注册协作。

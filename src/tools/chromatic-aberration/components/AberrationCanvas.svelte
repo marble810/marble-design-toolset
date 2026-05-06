@@ -430,17 +430,20 @@ void main(void) {
 
 				// Register export — force-render in getCanvas() ensures the WebGL
 				// drawing buffer is current at the moment of capture.
-				unregisterExporter = exportContext?.register({
-					kind: 'canvas',
-					get contentWidth()  { return pixiApp?.renderer.width  ?? sourceWidth; },
-					get contentHeight() { return pixiApp?.renderer.height ?? sourceHeight; },
-					getCanvas: () => {
-						if (!pixiApp) return null;
-						syncUniforms();
-						pixiApp.render(); // ensure buffer is current before capture
-						return pixiApp.canvas as HTMLCanvasElement;
-					}
-				}) ?? null;
+				unregisterExporter = exportContext?.register(
+					{
+						kind: 'canvas',
+						get contentWidth()  { return pixiApp?.renderer.width  ?? sourceWidth; },
+						get contentHeight() { return pixiApp?.renderer.height ?? sourceHeight; },
+						getCanvas: () => {
+							if (!pixiApp) return null;
+							syncUniforms();
+							pixiApp.render(); // ensure buffer is current before capture
+							return pixiApp.canvas as HTMLCanvasElement;
+						}
+					},
+					{ id: 'preview-canvas', label: 'Preview Canvas' }
+				) ?? null;
 
 				// Load initial source if provided
 				if (objectUrl && sourceKind) {

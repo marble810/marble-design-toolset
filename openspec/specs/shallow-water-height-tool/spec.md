@@ -1,17 +1,22 @@
-## ADDED Requirements
+# shallow-water-height-tool Specification
 
-### Requirement: Tool module is registered as a Three.js height animation tool with video-only export
-系统 SHALL 提供 `shallow-water-height` 工具模块，工具 SHALL 继续遵循 `src/tools/<tool-id>/` schema，并通过共享 tech stack runtime 加载 `three`。该工具的 metadata MUST 只声明视频导出能力，MUST NOT 声明静态图片导出能力。
+## Purpose
+定义 Shallow Water Height 工具的 Three.js 浅水高度场模拟、init map 输入、预设源、预览和 PNG/video 导出契约。
+
+## Requirements
+
+### Requirement: Tool module is registered as a Three.js image-driven height animation tool
+系统 SHALL 提供 `shallow-water-height` 工具模块，工具 SHALL 遵循 `src/tools/<tool-id>/` schema，metadata SHALL 声明图片和视频导出能力，runtime definition SHALL 声明 `techStack: ['three']` 并懒加载 master Svelte 组件。
 
 #### Scenario: Tool appears in workspace catalog
 - **WHEN** 工作区发现 `src/tools/shallow-water-height/metadata.json`
 - **THEN** 工具目录中出现名为 `Shallow Water Height` 的可用工具
 - **THEN** 打开工具时工作区通过共享 tech stack runtime 加载 `three`
 
-#### Scenario: Export section reflects video-only capability
+#### Scenario: Export section reflects image and video capability
 - **WHEN** 用户打开浅水工具的 Export Section
-- **THEN** 该工具只暴露视频导出入口
-- **THEN** 不显示 PNG 或其他静态图像导出入口
+- **THEN** 该工具暴露 PNG 图片导出入口
+- **THEN** 该工具也暴露视频导出入口
 
 ### Requirement: Tool accepts either an imported grayscale image or a shared preset init map source
 系统 SHALL 允许 `shallow-water-height` 在两类 init map 来源之间切换：单张本地图像，以及共享 preset init map source。工具在任一来源发生结构性变化时 MUST 重建模拟初始状态，并在导入失败时保留最近一次成功的 init map。
@@ -85,15 +90,15 @@
 - **WHEN** 工具尚无有效 init map 来源
 - **THEN** 右侧预览区域显示稳定空态，而不是启动无输入模拟
 
-### Requirement: Tool exports deterministic video frames only through canvas export runtime
-系统 SHALL 通过现有 canvas export runtime 注册 `render` 类型 exporter，并只暴露视频导出能力。导出视频时，工具 MUST 根据当前 init map 来源、当前参数和导出 `frameIndex` 确定性渲染帧，而不是依赖当前预览播放进度。
+### Requirement: Tool exports deterministic PNG and video frames through canvas export runtime
+系统 SHALL 通过现有 canvas export runtime 注册 `render` 类型 exporter。导出 PNG 或视频时，工具 MUST 根据当前 init map 来源、当前参数和导出 `frameIndex` 确定性渲染帧，而不是依赖当前预览播放进度。
+
+#### Scenario: User exports PNG
+- **WHEN** 用户在 Export Section 中触发图片导出
+- **THEN** framework 调用工具注册的 `renderFrame({ time: 0, frameIndex: 0 })`
+- **THEN** 输出 PNG 包含当前参数下的黑白高度图帧
 
 #### Scenario: User exports video
 - **WHEN** 用户在 Export Section 中选择 fps 与 duration 并触发视频导出
 - **THEN** framework 逐帧调用工具注册的 `renderFrame`
 - **THEN** 输出视频中的每一帧都由同一个 init map 来源和固定步进模拟生成
-
-#### Scenario: User requests a static image export
-- **WHEN** 用户查看浅水工具的导出能力
-- **THEN** 该工具不提供静态图像导出表单
-- **THEN** framework 不会对该工具调用图片导出路径

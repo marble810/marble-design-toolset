@@ -25,3 +25,14 @@ export {
 } from './mime';
 export { exportMp4 } from './mp4';
 export { triggerDownload, defaultExportFilename } from './download';
+export {
+	createCanvasExportDiagnostics,
+	createExporterOptions,
+	reconcileExporterSelection,
+	resolveActiveExporter,
+	runCanvasExportTask,
+	type CanvasExportDiagnostic,
+	type CanvasExportRunState,
+	type ExporterSelectionResult,
+	type ExporterSelectOption
+} from './state';

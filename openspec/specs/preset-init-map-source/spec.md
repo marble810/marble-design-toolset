@@ -1,4 +1,9 @@
-## ADDED Requirements
+# preset-init-map-source Specification
+
+## Purpose
+定义共享 preset init map source 运行时，使工具可以复用确定性的灰度初始图生成能力，而不依赖其他工具的私有实现。
+
+## Requirements
 
 ### Requirement: Tools can consume a shared preset init map source runtime
 系统 SHALL 提供一个共享的 preset init map source 运行时模块，使任意 tool 无需依赖其他 tool 私有代码即可导入它并请求灰度 init map 栅格输出。该模块 MUST 暴露稳定的参数类型与按目标尺寸生成栅格数据的入口。

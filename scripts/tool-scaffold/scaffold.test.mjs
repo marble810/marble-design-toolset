@@ -10,6 +10,7 @@ import {
 	deriveToolNames,
 	parseTechStackInput
 } from './index.js';
+import { validateToolDirectory } from '../tool-contract/validate.mjs';
 
 test('deriveToolNames normalizes a display name into tool id and component name', () => {
 	assert.deepStrictEqual(deriveToolNames('Banner Maker 2'), {
@@ -39,6 +40,7 @@ test('buildScaffoldFiles emits tech stacks only in index.ts', () => {
 
 	assert.match(files.get('index.ts'), /techStack: \['three', 'gsap'\]/);
 	assert.doesNotMatch(files.get('metadata.json'), /techStack/);
+	assert.match(files.get('BannerMaker.svelte'), /import \{ Field \}/);
 	assert.ok(files.has(path.join('components', 'BannerMakerPreview.svelte')));
 });
 
@@ -69,7 +71,11 @@ test('createToolScaffold writes the generated tool into src/tools', async () => 
 			path.join(workspaceRoot, 'src', 'tools', 'banner-maker', 'components', 'BannerMakerStage.svelte'),
 			'utf8'
 		),
-		/Declared tech stacks: pixi/
+		/createRenderHostLifecycle[\s\S]*Declared tech stacks: pixi/
+	);
+	assert.deepEqual(
+		await validateToolDirectory(path.join(workspaceRoot, 'src', 'tools', 'banner-maker'), 'banner-maker'),
+		[]
 	);
 });
 

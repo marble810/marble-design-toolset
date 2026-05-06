@@ -1,8 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { getCanvasExportContext } from '$lib/runtime/canvas-export/context';
-	import { getToolSessionContext } from '$lib/runtime/tool-session-context';
-	import { loadTechStack } from '$lib/runtime/tech-stack';
+	import {
+		createCanvas2DRenderHost,
+		createPixiApplicationHost,
+		createRenderHostLifecycle
+	} from '$lib/runtime/render-host/index.js';
 	import type { Pixels16Buffer } from '$lib/types/canvas-export';
 	import type { Application, Sprite, Texture } from 'pixi.js';
 	import { generateNoiseTexture } from '../noise/controller.js';
@@ -23,13 +25,12 @@
 
 	let { activeFamily, shared, perlin, voronoi }: Props = $props();
 
-	const exportContext = getCanvasExportContext();
-	const toolSessionContext = getToolSessionContext();
+	const renderHost = createRenderHostLifecycle();
 
 	let hostElement = $state<HTMLDivElement | null>(null);
-	let isReady = $state(false);
-	let errorMessage = $state('');
-	let isSessionActive = $derived(toolSessionContext?.isActive() ?? true);
+	const isReady = $derived(renderHost.isReady);
+	const errorMessage = $derived(renderHost.errorMessage);
+	const isSessionActive = $derived(renderHost.isSessionActive);
 
 	let pixiApp: Application | null = null;
 	let previewTexture: Texture | null = null;
@@ -81,26 +82,22 @@
 	});
 
 	onMount(() => {
-		let disposed = false;
-		let unregisterExporter: (() => void) | undefined;
+		void renderHost.runInit(async () => {
+			if (!hostElement) {
+				throw new Error('Preview host is unavailable.');
+			}
 
-		void (async () => {
-			try {
-				const PIXI = await loadTechStack('pixi');
-				if (disposed || !hostElement) {
-					return;
-				}
+			const sourceHost = createCanvas2DRenderHost(renderHost, {
+				width: PREVIEW_SIZE,
+				height: PREVIEW_SIZE,
+				willReadFrequently: true
+			});
+			sourceCanvas = sourceHost.canvas;
+			sourceContext = sourceHost.context;
 
-				sourceCanvas = document.createElement('canvas');
-				sourceCanvas.width = PREVIEW_SIZE;
-				sourceCanvas.height = PREVIEW_SIZE;
-				sourceContext = sourceCanvas.getContext('2d', { willReadFrequently: true });
-				if (!sourceContext) {
-					throw new Error('Failed to acquire a 2D preview context.');
-				}
-
-				pixiApp = new PIXI.Application();
-				await pixiApp.init({
+			const pixiHost = await createPixiApplicationHost(renderHost, {
+				hostElement,
+				init: {
 					width: PREVIEW_SIZE,
 					height: PREVIEW_SIZE,
 					backgroundAlpha: 0,
@@ -108,21 +105,19 @@
 					autoDensity: false,
 					antialias: false,
 					autoStart: false
-				});
-
-				if (disposed || !hostElement || !sourceCanvas) {
-					pixiApp.destroy({ removeView: true }, { children: true, texture: true, textureSource: true, context: true });
-					return;
 				}
+			});
 
-				hostElement.replaceChildren(pixiApp.canvas);
-				previewTexture = PIXI.Texture.from(sourceCanvas);
-				previewSprite = new PIXI.Sprite(previewTexture);
-				previewSprite.width = PREVIEW_SIZE;
-				previewSprite.height = PREVIEW_SIZE;
-				pixiApp.stage.addChild(previewSprite);
+			const PIXI = pixiHost.PIXI;
+			pixiApp = pixiHost.app;
+			previewTexture = PIXI.Texture.from(sourceCanvas);
+			previewSprite = new PIXI.Sprite(previewTexture);
+			previewSprite.width = PREVIEW_SIZE;
+			previewSprite.height = PREVIEW_SIZE;
+			pixiApp.stage.addChild(previewSprite);
 
-				unregisterExporter = exportContext?.register({
+			renderHost.registerCanvasExporter(
+				{
 					kind: 'canvas',
 					get contentWidth() {
 						return PREVIEW_SIZE;
@@ -137,30 +132,21 @@
 						mp4: false,
 						pngBitDepth: 16
 					}
-				});
-
-				isReady = true;
-				renderPreview();
-			} catch (error) {
-				errorMessage = error instanceof Error ? error.message : 'Failed to initialize Pixi preview.';
-			}
-		})();
-
-		return () => {
-			disposed = true;
-			unregisterExporter?.();
-			pixiApp?.destroy(
-				{ removeView: true },
-				{ children: true, texture: true, textureSource: true, context: true }
+				},
+				{ id: 'height-map', label: 'Height Map' }
 			);
-			hostElement?.replaceChildren();
-			pixiApp = null;
-			previewTexture = null;
-			previewSprite = null;
-			sourceCanvas = null;
-			sourceContext = null;
-			latestPixels16 = null;
-		};
+
+			renderHost.addCleanup(() => {
+				pixiApp = null;
+				previewTexture = null;
+				previewSprite = null;
+				sourceCanvas = null;
+				sourceContext = null;
+				latestPixels16 = null;
+			});
+
+			renderPreview();
+		}, 'Failed to initialize Pixi preview.');
 	});
 </script>
 

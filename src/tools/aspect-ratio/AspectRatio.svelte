@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button/index.js";
+  import { Button, Field, PresetGrid } from "$lib/components/ui/index.js";
   import {
     createPreviewCanvasFooterInfo,
     footerBodyLine,
@@ -9,8 +9,6 @@
     RightPanel,
     Section,
   } from "$lib/components/shell/index.js";
-  import DimensionFields from "./components/DimensionFields.svelte";
-  import PresetGrid from "./components/PresetGrid.svelte";
 
   interface PresetRatio {
     label: string;
@@ -30,6 +28,11 @@
     { label: "4:5", w: 4, h: 5 },
   ];
 
+  const PRESET_ITEMS = PRESETS.map((preset) => ({
+    value: preset.label,
+    label: preset.label,
+  }));
+
   // Reactive state
   let ratioW = $state(16);
   let ratioH = $state(9);
@@ -48,6 +51,13 @@
     customRatioH = "";
     // Recalculate height from current width
     heightPx = Math.round((widthPx * ratioH) / ratioW);
+  }
+
+  function selectPresetByLabel(label: string) {
+    const preset = PRESETS.find((entry) => entry.label === label);
+    if (preset) {
+      selectPreset(preset);
+    }
   }
 
   let widthError = $state("");
@@ -115,9 +125,9 @@
 <LeftPanel>
   <Section title="Presets">
     <PresetGrid
-      presets={PRESETS}
-      activeLabel={activePreset}
-      onSelect={selectPreset}
+      items={PRESET_ITEMS}
+      value={activePreset}
+      onselect={selectPresetByLabel}
     />
   </Section>
 
@@ -150,14 +160,29 @@
   </Section>
 
   <Section title="Dimensions">
-    <DimensionFields
-      {widthPx}
-      {heightPx}
-      {widthError}
-      {heightError}
-      {onWidthChange}
-      {onHeightChange}
-    />
+    <div class="aspect-ratio-tool__dimension-fields">
+      <Field label="Width (px)" forId="aspect-ratio-width" error={widthError}>
+        <input
+          id="aspect-ratio-width"
+          type="number"
+          min="1"
+          value={widthPx}
+          onchange={onWidthChange}
+          class="pixel-input"
+        />
+      </Field>
+
+      <Field label="Height (px)" forId="aspect-ratio-height" error={heightError}>
+        <input
+          id="aspect-ratio-height"
+          type="number"
+          min="1"
+          value={heightPx}
+          onchange={onHeightChange}
+          class="pixel-input"
+        />
+      </Field>
+    </div>
   </Section>
 
   <Section title="Current Frame" collapsible>
@@ -227,6 +252,12 @@
     margin: 0;
     color: var(--color-fg-muted);
     font-size: var(--font-size-1);
+  }
+
+  .aspect-ratio-tool__dimension-fields {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
   }
 
   .aspect-ratio-tool__error {

@@ -19,13 +19,17 @@
 | --- | --- |
 | `src/lib/types/tool.ts` | `ToolDefinition`、`ToolMetadata` 等核心类型 |
 | `src/lib/runtime/tool-registry.ts` | catalog 发现与 definition 懒加载逻辑 |
+| `src/lib/runtime/tool-runtime-context.ts` | toolId、metadata、menu action、session active 与 tech stack 访问 |
 | `src/lib/runtime/tech-stack.ts` | heavy tech stack 加载器与缓存 |
+| `src/lib/runtime/io/` | tool-facing 文件来源 workflow、摘要与下载 primitive |
 | `src/lib/runtime/file-input/` | 统一文件输入控制器、drop helper 与标准化读取逻辑 |
-| `src/routes/+page.svelte` | 顶层 tool 装载流程 |
+| `src/lib/components/tool-io/` | `SourceInputSection` 与 `DropZone` |
+| `src/lib/runtime/render-host/` | Canvas2D、Pixi、Three 的 session-aware lifecycle helper |
+| `src/lib/runtime/workspace-controller/` | workspace tabs、hash、localStorage 与左侧宽度控制器 |
 | `src/lib/components/shell/index.ts` | shell 组件统一导出 |
 | `src/tools/hello-world/` | 最简 tool 示例 |
 | `src/tools/aspect-ratio/` | 参数型 tool 示例 |
-| `src/tools/three-cube/` | heavy tech stack 示例 |
+| `src/tools/shallow-water-height/` | Three / render host / export 示例 |
 
 ## 推荐方式：先用脚手架
 
@@ -212,24 +216,71 @@ workspace 现在采用 keep-alive 的 tab session 模型：
 
 这意味着一个重要区别：不要再把“切到别的 tab”当成卸载信号。`onMount` 返回的清理函数只会在工具真正销毁时执行，例如用户关闭 tab。
 
-如果你的 tool 有 Pixi、Three、ticker、定时器、观察器或持续计算，可以读取可选的会话活动状态，在隐藏时暂停、重新激活时恢复：
+如果你的 tool 有 Pixi、Three、ticker、定时器、观察器或持续计算，优先使用 `src/lib/runtime/render-host/`。它会读取 session active 状态，并提供自动 cleanup、RAF 暂停/恢复和 exporter 自动注销：
 
 ```ts
-import { getToolSessionContext } from '$lib/runtime/tool-session-context';
+import { createRenderHostLifecycle } from '$lib/runtime/render-host/index.js';
 
-const toolSessionContext = getToolSessionContext();
-let isSessionActive = $derived(toolSessionContext?.isActive() ?? true);
+const renderHost = createRenderHostLifecycle();
+const isReady = $derived(renderHost.isReady);
+const errorMessage = $derived(renderHost.errorMessage);
 
-$effect(() => {
-  if (!isSessionActive) {
-    return;
-  }
-
-  // resume render loop, polling, or preview refresh here
+renderHost.startAnimationLoop(() => {
+  // 只有当前 tool session active 时才会执行
 });
 ```
 
-这个接口是可选的。不使用它的现有 tool 仍然可以正常运行；只有当你的 tool 确实有后台资源或高频副作用时，才需要显式消费它。
+底层 `getToolSessionContext()` 仍然存在，但新工具通常不需要直接消费它。
+
+## Tool runtime context
+
+工具内部可以通过 runtime context 读取 framework 提供的稳定身份和服务：
+
+```ts
+import { getToolRuntimeContext } from '$lib/runtime/tool-runtime-context';
+
+const runtime = getToolRuntimeContext();
+const toolId = $derived(runtime?.toolId ?? 'unknown-tool');
+```
+
+runtime context 包含：
+
+- `toolId`：真实目录 id，用于导出文件名、诊断和日志，不要从 metadata name 反推
+- `metadata`：当前 tool 的静态元数据
+- `isActive()`：当前 tab session 是否 active
+- `menuActions` / `dispatchMenuAction()`：MainInfo 菜单动作
+- `declaredTechStacks` / `loadedTechStacks` / `getLoadedTechStack()`：声明和已加载的可选技术栈
+
+如果只需要渲染生命周期，请优先使用 render host helper；如果只需要文件来源，请优先使用 tool IO facade。
+
+## Tool IO 与共享 workflow UI
+
+本地文件来源不要在 tool 内重复维护 picker、drop、Source section 和对象 URL 清理。推荐模式：
+
+```svelte
+<script lang="ts">
+  import { onDestroy } from 'svelte';
+  import { SourceInputSection, DropZone } from '$lib/components/tool-io/index.js';
+  import { createToolSourceInput } from '$lib/runtime/io/index.js';
+
+  const sourceInput = createToolSourceInput({ allowedKinds: ['image', 'video'] });
+  const sourceItem = $derived(sourceInput.currentItem);
+
+  onDestroy(() => sourceInput.dispose());
+</script>
+
+<LeftPanel>
+  <SourceInputSection source={sourceInput} />
+</LeftPanel>
+
+<RightPanel>
+  <DropZone source={sourceInput} ariaLabel="Drop source file">
+    <!-- preview consumes sourceItem -->
+  </DropZone>
+</RightPanel>
+```
+
+参数型 UI 优先复用 `Field`、`SelectField`、`CheckboxField`、`SegmentedControl` 和 `PresetGrid`，不要在每个 tool 里复制 label/error/preset grid 样式。
 
 ## 目录 Schema
 

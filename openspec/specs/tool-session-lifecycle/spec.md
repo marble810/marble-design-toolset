@@ -1,7 +1,7 @@
 # tool-session-lifecycle Specification
 
 ## Purpose
-定义 Marble Design Toolset 中工具标签会话的保活、销毁与活动状态切换语义。
+定义 Marble Design Toolset 中工具标签会话的保活、销毁、活动状态切换和实例身份稳定语义。
 
 ## Requirements
 ### Requirement: 已打开工具会话在标签切换时保持挂载

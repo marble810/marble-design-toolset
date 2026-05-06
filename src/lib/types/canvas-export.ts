@@ -76,8 +76,14 @@ export type CanvasExporterDescriptor =
 
 export interface RegisteredExporter {
 	id: string;
+	label: string;
 	descriptor: CanvasExporterDescriptor;
 	resolved: ResolvedCapabilities;
+}
+
+export interface CanvasExporterRegistrationOptions {
+	id?: string;
+	label?: string;
 }
 
 export interface PngExportOptions {
@@ -105,5 +111,8 @@ export interface ExportResult {
 
 export interface CanvasExportContextValue {
 	exporters: ReadonlyArray<RegisteredExporter>;
-	register: (descriptor: CanvasExporterDescriptor) => () => void;
+	register: (
+		descriptor: CanvasExporterDescriptor,
+		options?: CanvasExporterRegistrationOptions
+	) => () => void;
 }

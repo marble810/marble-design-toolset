@@ -5,3 +5,8 @@ export * from './collapsible/index.js';
 export * from './tabs/index.js';
 export * from './pixel-icon/index.js';
 export * from './slider-field/index.js';
+export * from './field/index.js';
+export * from './select-field/index.js';
+export * from './checkbox-field/index.js';
+export * from './segmented-control/index.js';
+export * from './preset-grid/index.js';

@@ -3,8 +3,11 @@ import test from 'node:test';
 
 import {
 	activateWorkspaceToolSelection,
+	clampLeftPanelWidthVw,
 	closeWorkspaceToolSelection,
 	DEFAULT_LEFT_PANEL_WIDTH_VW,
+	MAX_LEFT_PANEL_WIDTH_VW,
+	MIN_LEFT_PANEL_WIDTH_VW,
 	persistWorkspaceState,
 	resolveInitialWorkspaceState
 } from './workspace-state.ts';
@@ -185,4 +188,11 @@ test('persistWorkspaceState writes the restored tabs without changing the storag
 	} finally {
 		mock.restore();
 	}
+});
+
+test('clampLeftPanelWidthVw preserves configured left panel width bounds', () => {
+	assert.equal(clampLeftPanelWidthVw(MIN_LEFT_PANEL_WIDTH_VW - 10), MIN_LEFT_PANEL_WIDTH_VW);
+	assert.equal(clampLeftPanelWidthVw(MAX_LEFT_PANEL_WIDTH_VW + 10), MAX_LEFT_PANEL_WIDTH_VW);
+	assert.equal(clampLeftPanelWidthVw(31.4), 31);
+	assert.equal(clampLeftPanelWidthVw(Number.NaN), DEFAULT_LEFT_PANEL_WIDTH_VW);
 });

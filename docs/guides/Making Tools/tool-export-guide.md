@@ -98,12 +98,15 @@
   const exportContext = getCanvasExportContext();
 
   onMount(() => {
-    const unregister = exportContext?.register({
-      kind: 'canvas',
-      get contentWidth() { return width; },
-      get contentHeight() { return height; },
-      getCanvas: () => canvas
-    });
+    const unregister = exportContext?.register(
+      {
+        kind: 'canvas',
+        get contentWidth() { return width; },
+        get contentHeight() { return height; },
+        getCanvas: () => canvas
+      },
+      { id: 'preview-canvas', label: 'Preview Canvas' }
+    );
     return () => unregister?.();
   });
 </script>
@@ -145,14 +148,17 @@ interface ToolExportCapabilities {
 
 ## Step 2 — 在子组件中注册 exporter
 
-通过 `getCanvasExportContext()` 拿到 context，再调用 `register(descriptor)` 返回**注销函数**。
+通过 `getCanvasExportContext()` 拿到 context，再调用 `register(descriptor, options)` 返回**注销函数**。`options.id` 是稳定 exporter id，`options.label` 用于多 exporter 选择器；只注册一个 exporter 时 selector 不显示，但仍建议传入稳定 id。
 
 ### 核心 API
 
 ```ts
 interface CanvasExportContextValue {
   exporters: ReadonlyArray<RegisteredExporter>;
-  register: (descriptor: CanvasExporterDescriptor) => () => void;
+  register: (
+    descriptor: CanvasExporterDescriptor,
+    options?: { id?: string; label?: string }
+  ) => () => void;
 }
 ```
 
@@ -193,7 +199,10 @@ import { getCanvasExportContext } from '$lib/runtime/canvas-export/context';
 const exportContext = getCanvasExportContext();
 
 onMount(() => {
-  const unregister = exportContext?.register({ /* ... */ });
+  const unregister = exportContext?.register(
+    { /* ... */ },
+    { id: 'preview-canvas', label: 'Preview Canvas' }
+  );
   return () => unregister?.();
 });
 ```
@@ -213,15 +222,18 @@ onMount(() => {
     isReady = true;
 
     const rendererRef = renderer; // 捕获引用，便于 getter 内安全访问
-    unregisterExporter = exportContext?.register({
-      kind: 'canvas',
-      get contentWidth() { return rendererRef.domElement.width; },
-      get contentHeight() { return rendererRef.domElement.height; },
-      getCanvas: () => {
-        rendererRef.render(scene, camera); // 抓帧前 force render 一次
-        return rendererRef.domElement;
-      }
-    }) ?? null;
+    unregisterExporter = exportContext?.register(
+      {
+        kind: 'canvas',
+        get contentWidth() { return rendererRef.domElement.width; },
+        get contentHeight() { return rendererRef.domElement.height; },
+        getCanvas: () => {
+          rendererRef.render(scene, camera); // 抓帧前 force render 一次
+          return rendererRef.domElement;
+        }
+      },
+      { id: 'three-preview', label: 'Three Preview' }
+    ) ?? null;
   })();
 
   return () => {
@@ -462,26 +474,25 @@ exportContext?.register({
 
 仓库中两个生产级示例：
 
-### Example A: Programmatic 2D — `noise-texture-creater`
+### Example A: Pixi + 16-bit PNG — `noise-texture-creater`
 
 文件：[`src/tools/noise-texture-creater/components/NoisePreview.svelte`](../../../src/tools/noise-texture-creater/components/NoisePreview.svelte)
 
 要点：
 
-- `kind: 'render'`，`renderFrame` 用 `OffscreenCanvas` + worker 生成噪声。
-- `contentWidth` / `contentHeight` 用 getter 跟随用户在 LeftPanel 调整的尺寸 slider。
-- 同时声明 `image: true` + `video: true` —— 实际可导出 3s × 30fps 的噪声滚动 MP4。
+- 使用 render host lifecycle 初始化 Pixi preview，并通过 helper 自动注销 exporter。
+- `kind: 'canvas'`，`getCanvas` 返回 source canvas，`getPixels16` 返回最新 16-bit buffer。
+- `capabilities.pngBitDepth: 16` 让 Export Section 显示 8-bit / 16-bit 选择器。
 
-### Example B: WebGL — `three-cube`
+### Example B: Three render callback — `shallow-water-height`
 
-文件：[`src/tools/three-cube/components/CubeViewport.svelte`](../../../src/tools/three-cube/components/CubeViewport.svelte)
+文件：[`src/tools/shallow-water-height/components/ShallowWaterPreview.svelte`](../../../src/tools/shallow-water-height/components/ShallowWaterPreview.svelte)
 
 要点：
 
-- `kind: 'canvas'`，`getCanvas` 返回 `renderer.domElement`。
-- WebGLRenderer 构造选项包含 `preserveDrawingBuffer: true`。
-- `getCanvas` 内 `renderer.render(scene, camera)` 强制重绘一次，确保抓帧不空。
-- `metadata.json` 中 `enabled: false`（因为是 starter 示例），临时改成 true 即可在 LeftPanel 看到 Export Section。
+- 使用 render host lifecycle 的 session-aware animation loop。
+- `kind: 'render'`，`renderFrame` 按 `frameIndex` 重放模拟帧到 framework 提供的离屏 canvas。
+- `capabilities: { png: true, mp4: true }` 同时开放 PNG 快照与视频导出。
 
 ---
 
@@ -518,8 +529,27 @@ import {
 // 仅在 ToolShell.svelte 内部使用，tool 不应调用 set
 type CanvasExportContextValue = {
   exporters: ReadonlyArray<RegisteredExporter>;
-  register: (descriptor: CanvasExporterDescriptor) => () => void;
+  register: (
+    descriptor: CanvasExporterDescriptor,
+    options?: { id?: string; label?: string }
+  ) => () => void;
 };
+```
+
+如果使用 `src/lib/runtime/render-host/`，可以让 lifecycle helper 自动注销 exporter：
+
+```ts
+const renderHost = createRenderHostLifecycle();
+
+renderHost.registerCanvasExporter(
+  {
+    kind: 'canvas',
+    get contentWidth() { return width; },
+    get contentHeight() { return height; },
+    getCanvas: () => canvas
+  },
+  { id: 'preview-canvas', label: 'Preview Canvas' }
+);
 ```
 
 ### Descriptor 类型
