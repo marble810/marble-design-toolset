@@ -1,4 +1,10 @@
 <script lang="ts">
+	import {
+		createDefaultPresetInitMap,
+		normalizePresetInitMap,
+		type PresetInitMapDescriptor,
+		type PresetInitMapKind
+	} from '$lib/runtime/preset-init-map.js';
 	import { onDestroy } from 'svelte';
 	import { LeftPanel, PreviewCanvas, RightPanel } from '$lib/components/shell/index.js';
 	import {
@@ -8,9 +14,11 @@
 	import ShallowWaterControls from './components/ShallowWaterControls.svelte';
 	import ShallowWaterPreview from './components/ShallowWaterPreview.svelte';
 	import {
-		OUTPUT_SIZE,
+		INIT_MAP_SOURCE_MODES,
 		createDefaultShallowWaterParameters,
 		normalizeParameters,
+		type InitMapSourceMode,
+		type ShallowWaterInitMapSource,
 		type ShallowWaterParameters
 	} from './simulation/shared.js';
 
@@ -18,11 +26,19 @@
 	onDestroy(() => fileInput.dispose());
 
 	let parameters = $state<ShallowWaterParameters>(createDefaultShallowWaterParameters());
+	let sourceMode = $state<InitMapSourceMode>(INIT_MAP_SOURCE_MODES[0]);
+	let preset = $state<PresetInitMapDescriptor>(createDefaultPresetInitMap());
+	let resimulateToken = $state(0);
 	const imageItem = $derived(fileInput.currentItem?.kind === 'image' ? fileInput.currentItem : null);
 	const normalizedParameters = $derived(normalizeParameters(parameters));
-	const previewLabel = $derived(
-		imageItem ? `Shallow Water Height - ${normalizedParameters.resolution}px sim` : 'Shallow Water Height'
-	);
+	const previewLabel = $derived(`Shallow Water Height - ${normalizedParameters.resolution}px sim`);
+	const activeInitMapSource = $derived.by<ShallowWaterInitMapSource | null>(() => {
+		if (sourceMode === 'image') {
+			return imageItem ? { kind: 'image', objectUrl: imageItem.objectUrl } : null;
+		}
+
+		return { kind: 'preset', preset: normalizePresetInitMap(preset) };
+	});
 
 	function updateParameter<Key extends keyof ShallowWaterParameters>(
 		key: Key,
@@ -35,9 +51,28 @@
 		parameters = createDefaultShallowWaterParameters();
 	}
 
-	function handlePreviewDrop(event: DragEvent) {
+	function resimulate() {
+		resimulateToken += 1;
+	}
+
+	function updateSourceMode(mode: InitMapSourceMode) {
+		sourceMode = mode;
+	}
+
+	function updatePreset(nextPreset: PresetInitMapDescriptor) {
+		preset = normalizePresetInitMap(nextPreset);
+	}
+
+	function updatePresetKind(kind: PresetInitMapKind) {
+		preset = createDefaultPresetInitMap(kind);
+	}
+
+	async function handlePreviewDrop(event: DragEvent) {
 		event.preventDefault();
-		void fileInput.ingestFiles(extractDroppedFiles(event), 'drop');
+		const imported = await fileInput.ingestFiles(extractDroppedFiles(event), 'drop');
+		if (imported?.kind === 'image') {
+			sourceMode = 'image';
+		}
 	}
 
 	function handlePreviewDragOver(event: DragEvent) {
@@ -49,16 +84,22 @@
 	<ShallowWaterControls
 		fileInput={fileInput}
 		imageItem={imageItem}
+		sourceMode={sourceMode}
+		preset={preset}
 		parameters={normalizedParameters}
 		onParameterChange={updateParameter}
+		onSourceModeChange={updateSourceMode}
+		onPresetChange={updatePreset}
+		onPresetKindChange={updatePresetKind}
+		onResimulate={resimulate}
 		onReset={resetParameters}
 	/>
 </LeftPanel>
 
 <RightPanel>
 	<PreviewCanvas
-		contentWidth={OUTPUT_SIZE}
-		contentHeight={OUTPUT_SIZE}
+		contentWidth={normalizedParameters.resolution}
+		contentHeight={normalizedParameters.resolution}
 		defaultZoom="1:1"
 		label={previewLabel}
 	>
@@ -69,7 +110,14 @@
 			ondragover={handlePreviewDragOver}
 			ondrop={handlePreviewDrop}
 		>
-			<ShallowWaterPreview imageItem={imageItem} parameters={normalizedParameters} />
+			{#key normalizedParameters.resolution}
+				<ShallowWaterPreview
+					initMapSource={activeInitMapSource}
+					sourceMode={sourceMode}
+					parameters={normalizedParameters}
+					resimulateToken={resimulateToken}
+				/>
+			{/key}
 		</div>
 	</PreviewCanvas>
 </RightPanel>

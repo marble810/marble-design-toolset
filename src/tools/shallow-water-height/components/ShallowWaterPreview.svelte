@@ -3,19 +3,25 @@
 	import { getCanvasExportContext } from '$lib/runtime/canvas-export/context';
 	import { getToolSessionContext } from '$lib/runtime/tool-session-context';
 	import { loadTechStack } from '$lib/runtime/tech-stack';
-	import type { ImportedImageFileItem } from '$lib/types/file-input';
-	import { OUTPUT_SIZE, type ShallowWaterParameters } from '../simulation/shared.js';
-	import { loadImageHeightData } from '../simulation/image-height.js';
+	import {
+		createInitMapSourceKey,
+		type InitMapSourceMode,
+		type ShallowWaterInitMapSource,
+		type ShallowWaterParameters
+	} from '../simulation/shared.js';
+	import { loadInitMapHeightData } from '../simulation/image-height.js';
 	import { ShallowWaterWaveRenderer } from '../simulation/wave-renderer.js';
 
 	type ThreeModule = typeof import('three');
 
 	interface Props {
-		imageItem: ImportedImageFileItem | null;
+		initMapSource: ShallowWaterInitMapSource | null;
+		sourceMode: InitMapSourceMode;
 		parameters: ShallowWaterParameters;
+		resimulateToken: number;
 	}
 
-	let { imageItem, parameters }: Props = $props();
+	let { initMapSource, sourceMode, parameters, resimulateToken }: Props = $props();
 
 	const exportContext = getCanvasExportContext();
 	const toolSessionContext = getToolSessionContext();
@@ -28,24 +34,43 @@
 
 	let THREE: ThreeModule | null = null;
 	let previewRenderer: ShallowWaterWaveRenderer | null = null;
+	let previewResolution = 0;
 	let previewInitialData: Float32Array | null = null;
 	let previewKey = '';
 	let loadVersion = 0;
 
 	let exportRenderer: ShallowWaterWaveRenderer | null = null;
-	let exportCanvas: HTMLCanvasElement | null = null;
+	let exportResolution = 0;
+	let exportRenderCanvas: HTMLCanvasElement | null = null;
 	let exportInitialData: Float32Array | null = null;
 	let exportKey = '';
 	let exportFrame = -1;
 
 	const structuralKey = $derived(
-		imageItem
-			? [imageItem.objectUrl, parameters.resolution, parameters.amplitude, parameters.invert].join('|')
+		initMapSource
+			? [
+					createInitMapSourceKey(initMapSource),
+					parameters.resolution,
+					parameters.amplitude,
+					parameters.invert,
+					resimulateToken
+				].join('|')
 			: ''
 	);
 
 	$effect(() => {
-		if (!isReady || !previewRenderer || !imageItem || !structuralKey) {
+		if (!THREE || !canvasElement || !isReady) return;
+		if (!previewRenderer || previewResolution !== parameters.resolution) {
+			previewRenderer?.dispose();
+			previewRenderer = new ShallowWaterWaveRenderer(THREE, canvasElement, parameters.resolution);
+			previewResolution = parameters.resolution;
+			previewInitialData = null;
+			previewKey = '';
+		}
+	});
+
+	$effect(() => {
+		if (!isReady || !previewRenderer || !initMapSource || !structuralKey) {
 			previewInitialData = null;
 			previewKey = '';
 			return;
@@ -57,7 +82,7 @@
 
 		void (async () => {
 			try {
-				const heightData = await loadImageHeightData(imageItem.objectUrl, parameters);
+				const heightData = await loadInitMapHeightData(initMapSource, parameters);
 				if (version !== loadVersion || !previewRenderer) return;
 				previewInitialData = heightData;
 				previewKey = structuralKey;
@@ -79,8 +104,13 @@
 
 	async function renderExportFrame(canvas: HTMLCanvasElement, frameIndex: number) {
 		const context = canvas.getContext('2d');
-		if (!THREE || !imageItem || !structuralKey) {
-			context?.clearRect(0, 0, canvas.width, canvas.height);
+		if (!context) {
+			throw new Error('Failed to acquire 2D export context.');
+		}
+		context.imageSmoothingEnabled = false;
+
+		if (!THREE || !initMapSource || !structuralKey) {
+			context.clearRect(0, 0, canvas.width, canvas.height);
 			return;
 		}
 
@@ -88,22 +118,27 @@
 			exportInitialData =
 				previewKey === structuralKey && previewInitialData
 					? previewInitialData
-					: await loadImageHeightData(imageItem.objectUrl, parameters);
+					: await loadInitMapHeightData(initMapSource, parameters);
 			exportKey = structuralKey;
 			exportFrame = -1;
+			exportRenderer?.dispose();
+			exportRenderer = null;
+			exportRenderCanvas = null;
 		}
 
 		if (
 			!exportRenderer ||
-			exportCanvas !== canvas ||
-			canvas.width !== exportRenderer.canvas.width ||
-			canvas.height !== exportRenderer.canvas.height ||
+			!exportRenderCanvas ||
+			exportResolution !== parameters.resolution ||
 			frameIndex === 0 ||
 			frameIndex < exportFrame
 		) {
 			exportRenderer?.dispose();
-			exportRenderer = new ShallowWaterWaveRenderer(THREE, canvas, parameters.resolution);
-			exportCanvas = canvas;
+			exportRenderCanvas = document.createElement('canvas');
+			exportRenderCanvas.width = parameters.resolution;
+			exportRenderCanvas.height = parameters.resolution;
+			exportRenderer = new ShallowWaterWaveRenderer(THREE, exportRenderCanvas, parameters.resolution);
+			exportResolution = parameters.resolution;
 			exportRenderer.setInitialHeight(exportInitialData);
 			exportFrame = 0;
 		}
@@ -114,6 +149,8 @@
 		}
 
 		exportRenderer.render(parameters);
+		context.clearRect(0, 0, canvas.width, canvas.height);
+		context.drawImage(exportRenderCanvas, 0, 0, canvas.width, canvas.height);
 	}
 
 	onMount(() => {
@@ -126,25 +163,23 @@
 				THREE = await loadTechStack('three');
 				if (disposed || !canvasElement) return;
 
-				canvasElement.width = OUTPUT_SIZE;
-				canvasElement.height = OUTPUT_SIZE;
 				previewRenderer = new ShallowWaterWaveRenderer(THREE, canvasElement, parameters.resolution);
+				previewResolution = parameters.resolution;
 
 				unregisterExporter = exportContext?.register({
 					kind: 'render',
 					get contentWidth() {
-						return OUTPUT_SIZE;
+						return parameters.resolution;
 					},
 					get contentHeight() {
-						return OUTPUT_SIZE;
+						return parameters.resolution;
 					},
 					renderFrame: async ({ canvas, frameIndex }) => {
 						await renderExportFrame(canvas, frameIndex);
 					},
 					capabilities: {
-						png: true,
-						mp4: true,
-						pngBitDepth: 8
+						png: false,
+						mp4: true
 					}
 				});
 
@@ -173,7 +208,7 @@
 			exportRenderer?.dispose();
 			previewRenderer = null;
 			exportRenderer = null;
-			exportCanvas = null;
+			exportRenderCanvas = null;
 			previewInitialData = null;
 			exportInitialData = null;
 		};
@@ -181,13 +216,17 @@
 </script>
 
 <div class="shallow-preview">
-	<canvas class="shallow-preview__canvas" bind:this={canvasElement} width={OUTPUT_SIZE} height={OUTPUT_SIZE}></canvas>
+	<canvas class="shallow-preview__canvas" bind:this={canvasElement} width={parameters.resolution} height={parameters.resolution}></canvas>
 
-	{#if !imageItem}
+	{#if !initMapSource}
 		<div class="shallow-preview__overlay">
 			<div class="shallow-preview__message">
-				<strong>Drop init map</strong>
-				<span>Use a black-and-white image to seed the height field.</span>
+				<strong>No init map</strong>
+				<span>
+					{sourceMode === 'image'
+						? 'Drop a black-and-white image or switch to preset mode.'
+						: 'Choose a preset or image source to seed the height field.'}
+				</span>
 			</div>
 		</div>
 	{:else if !isReady || isLoadingMap}

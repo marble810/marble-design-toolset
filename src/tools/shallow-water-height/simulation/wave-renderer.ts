@@ -9,7 +9,7 @@ import type {
 	WebGLRenderer,
 	WebGLRenderTarget
 } from 'three';
-import { OUTPUT_SIZE, type ShallowWaterParameters } from './shared.js';
+import { type ShallowWaterParameters } from './shared.js';
 
 type ThreeModule = typeof import('three');
 
@@ -30,6 +30,8 @@ const computeFragmentShader = /* glsl */ `
 	uniform float damping;
 	uniform float edgeAbsorb;
 	uniform float gridSize;
+	uniform float guardBand;
+	uniform float restThreshold;
 
 	void main() {
 		vec4 state = texture2D(stateTexture, vUv);
@@ -44,11 +46,27 @@ const computeFragmentShader = /* glsl */ `
 		nextHeight *= damping;
 
 		float edgeDistance = min(min(vUv.x, 1.0 - vUv.x), min(vUv.y, 1.0 - vUv.y)) * gridSize;
-		float edgeFactor = edgeAbsorb <= 0.0 ? 1.0 : smoothstep(0.0, edgeAbsorb, edgeDistance);
+		float spongeWidth = edgeAbsorb * guardBand;
+		float edgeFactor = spongeWidth <= 0.0 ? 1.0 : smoothstep(0.0, spongeWidth, edgeDistance);
 		nextHeight *= edgeFactor;
 		nextHeight = clamp(nextHeight, -4.0, 4.0);
+		nextHeight = abs(nextHeight) < restThreshold ? 0.0 : nextHeight;
 
-		gl_FragColor = vec4(nextHeight, height, state.b, state.a);
+		gl_FragColor = vec4(nextHeight, height * edgeFactor, state.b, state.a);
+	}
+`;
+
+const seedFragmentShader = /* glsl */ `
+	precision highp float;
+	varying vec2 vUv;
+	uniform sampler2D seedTexture;
+	uniform float seedMaxHeight;
+
+	void main() {
+		vec4 seed = texture2D(seedTexture, vUv);
+		float encoded = (seed.r * 255.0 * 256.0 + seed.g * 255.0) / 65535.0;
+		float height = encoded * seedMaxHeight;
+		gl_FragColor = vec4(height, height, 0.0, 1.0);
 	}
 `;
 
@@ -57,13 +75,17 @@ const displayFragmentShader = /* glsl */ `
 	varying vec2 vUv;
 	uniform sampler2D stateTexture;
 	uniform float contrast;
+	uniform float guardRatio;
 
 	void main() {
-		float height = texture2D(stateTexture, vUv).r;
+		vec2 cropUv = vec2(guardRatio) + vUv * (1.0 - 2.0 * guardRatio);
+		float height = texture2D(stateTexture, cropUv).r;
 		float gray = clamp(0.5 + height * contrast, 0.0, 1.0);
 		gl_FragColor = vec4(vec3(gray), 1.0);
 	}
 `;
+
+const SEED_MAX_HEIGHT = 2;
 
 export class ShallowWaterWaveRenderer {
 	readonly canvas: HTMLCanvasElement;
@@ -73,43 +95,58 @@ export class ShallowWaterWaveRenderer {
 	private readonly camera: OrthographicCamera;
 	private readonly quad: Mesh;
 	private readonly geometry: PlaneGeometry;
+	private readonly seedMaterial: ShaderMaterial;
 	private readonly computeMaterial: ShaderMaterial;
 	private readonly displayMaterial: ShaderMaterial;
 	private readonly targets: [WebGLRenderTarget, WebGLRenderTarget];
-	private readonly size: number;
+	private readonly visibleSize: number;
+	private readonly simSize: number;
+	private readonly guardBand: number;
 	private dataTexture: DataTexture | null = null;
 	private currentTexture: Texture | null = null;
 	private nextTargetIndex = 0;
 
-	constructor(THREE: ThreeModule, canvas: HTMLCanvasElement, size: number) {
+	constructor(THREE: ThreeModule, canvas: HTMLCanvasElement, visibleSize: number) {
 		this.THREE = THREE;
 		this.canvas = canvas;
-		this.size = size;
+		this.visibleSize = visibleSize;
+		this.guardBand = Math.min(Math.round(visibleSize * 0.5), 256);
+		this.simSize = visibleSize + 2 * this.guardBand;
 		this.renderer = new THREE.WebGLRenderer({
 			canvas,
 			antialias: false,
 			alpha: false,
 			preserveDrawingBuffer: true
 		});
-		const outputWidth = canvas.width > 0 ? canvas.width : OUTPUT_SIZE;
-		const outputHeight = canvas.height > 0 ? canvas.height : OUTPUT_SIZE;
 		this.renderer.setPixelRatio(1);
-		this.renderer.setSize(outputWidth, outputHeight, false);
+		this.renderer.setSize(visibleSize, visibleSize, false);
 		this.renderer.setClearColor(0x000000, 1);
 
 		this.scene = new THREE.Scene();
 		this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 		this.geometry = new THREE.PlaneGeometry(2, 2);
+		this.seedMaterial = new THREE.ShaderMaterial({
+			vertexShader,
+			fragmentShader: seedFragmentShader,
+			uniforms: {
+				seedTexture: { value: null },
+				seedMaxHeight: { value: SEED_MAX_HEIGHT }
+			},
+			depthTest: false,
+			depthWrite: false
+		});
 		this.computeMaterial = new THREE.ShaderMaterial({
 			vertexShader,
 			fragmentShader: computeFragmentShader,
 			uniforms: {
 				stateTexture: { value: null },
-				texelSize: { value: new THREE.Vector2(1 / size, 1 / size) },
+				texelSize: { value: new THREE.Vector2(1 / this.simSize, 1 / this.simSize) },
 				waveSpeed: { value: 0.16 },
 				damping: { value: 0.992 },
-				edgeAbsorb: { value: 22 },
-				gridSize: { value: size }
+				edgeAbsorb: { value: 0.9 },
+				gridSize: { value: this.simSize },
+				guardBand: { value: this.guardBand },
+				restThreshold: { value: 0.0001 }
 			},
 			depthTest: false,
 			depthWrite: false
@@ -119,7 +156,8 @@ export class ShallowWaterWaveRenderer {
 			fragmentShader: displayFragmentShader,
 			uniforms: {
 				stateTexture: { value: null },
-				contrast: { value: 1.8 }
+				contrast: { value: 1.8 },
+				guardRatio: { value: this.guardBand / this.simSize }
 			},
 			depthTest: false,
 			depthWrite: false
@@ -130,31 +168,46 @@ export class ShallowWaterWaveRenderer {
 	}
 
 	setInitialHeight(heightData: Float32Array) {
-		const stateData = new Float32Array(this.size * this.size * 4);
-		for (let index = 0; index < heightData.length; index += 1) {
-			const stateIndex = index * 4;
-			const height = heightData[index] ?? 0;
-			stateData[stateIndex] = height;
-			stateData[stateIndex + 1] = height;
-			stateData[stateIndex + 2] = 0;
-			stateData[stateIndex + 3] = 1;
+		const stateData = new Uint8Array(this.simSize * this.simSize * 4);
+		for (let vy = 0; vy < this.visibleSize; vy += 1) {
+			for (let vx = 0; vx < this.visibleSize; vx += 1) {
+				const srcIndex = vy * this.visibleSize + vx;
+				const dstX = vx + this.guardBand;
+				const dstY = vy + this.guardBand;
+				const dstIndex = (dstY * this.simSize + dstX) * 4;
+				const normalizedHeight = Math.min(1, Math.max(0, (heightData[srcIndex] ?? 0) / SEED_MAX_HEIGHT));
+				const encodedHeight = Math.round(normalizedHeight * 65535);
+				stateData[dstIndex] = encodedHeight >> 8;
+				stateData[dstIndex + 1] = encodedHeight & 255;
+				stateData[dstIndex + 2] = 0;
+				stateData[dstIndex + 3] = 255;
+			}
 		}
 
 		this.dataTexture?.dispose();
 		this.dataTexture = new this.THREE.DataTexture(
 			stateData,
-			this.size,
-			this.size,
+			this.simSize,
+			this.simSize,
 			this.THREE.RGBAFormat,
-			this.THREE.FloatType
+			this.THREE.UnsignedByteType
 		);
 		this.dataTexture.minFilter = this.THREE.NearestFilter;
 		this.dataTexture.magFilter = this.THREE.NearestFilter;
 		this.dataTexture.wrapS = this.THREE.ClampToEdgeWrapping;
 		this.dataTexture.wrapT = this.THREE.ClampToEdgeWrapping;
 		this.dataTexture.needsUpdate = true;
-		this.currentTexture = this.dataTexture;
-		this.nextTargetIndex = 0;
+
+		const seedTarget = this.targets[0];
+		this.seedMaterial.uniforms.seedTexture.value = this.dataTexture;
+		this.quad.material = this.seedMaterial;
+		this.renderer.setRenderTarget(seedTarget);
+		this.renderer.setViewport(0, 0, this.simSize, this.simSize);
+		this.renderer.render(this.scene, this.camera);
+		this.renderer.setRenderTarget(null);
+		this.renderer.setViewport(0, 0, this.visibleSize, this.visibleSize);
+		this.currentTexture = seedTarget.texture;
+		this.nextTargetIndex = 1;
 	}
 
 	step(parameters: ShallowWaterParameters) {
@@ -162,14 +215,17 @@ export class ShallowWaterWaveRenderer {
 
 		this.computeMaterial.uniforms.stateTexture.value = this.currentTexture;
 		this.computeMaterial.uniforms.waveSpeed.value = parameters.waveSpeed;
-		this.computeMaterial.uniforms.damping.value = parameters.damping;
+		this.computeMaterial.uniforms.damping.value = this.resolveStepDamping(parameters.damping);
 		this.computeMaterial.uniforms.edgeAbsorb.value = parameters.edgeAbsorb;
+		this.computeMaterial.uniforms.restThreshold.value = parameters.restThreshold;
 		this.quad.material = this.computeMaterial;
 
 		const target = this.targets[this.nextTargetIndex];
 		this.renderer.setRenderTarget(target);
+		this.renderer.setViewport(0, 0, this.simSize, this.simSize);
 		this.renderer.render(this.scene, this.camera);
 		this.renderer.setRenderTarget(null);
+		this.renderer.setViewport(0, 0, this.visibleSize, this.visibleSize);
 		this.currentTexture = target.texture;
 		this.nextTargetIndex = 1 - this.nextTargetIndex;
 	}
@@ -179,11 +235,12 @@ export class ShallowWaterWaveRenderer {
 		this.displayMaterial.uniforms.contrast.value = parameters.contrast;
 		this.quad.material = this.displayMaterial;
 		this.renderer.setRenderTarget(null);
+		this.renderer.setViewport(0, 0, this.visibleSize, this.visibleSize);
 		this.renderer.render(this.scene, this.camera);
 	}
 
 	advanceFrames(frameCount: number, parameters: ShallowWaterParameters) {
-		const steps = Math.max(0, Math.round(frameCount) * parameters.stepsPerFrame);
+		const steps = this.resolveFrameStepCount(frameCount, parameters);
 		for (let index = 0; index < steps; index += 1) {
 			this.step(parameters);
 		}
@@ -193,6 +250,7 @@ export class ShallowWaterWaveRenderer {
 		this.dataTexture?.dispose();
 		this.targets[0].dispose();
 		this.targets[1].dispose();
+		this.seedMaterial.dispose();
 		this.computeMaterial.dispose();
 		this.displayMaterial.dispose();
 		this.geometry.dispose();
@@ -200,15 +258,34 @@ export class ShallowWaterWaveRenderer {
 	}
 
 	private createTarget(): WebGLRenderTarget {
-		return new this.THREE.WebGLRenderTarget(this.size, this.size, {
+		return new this.THREE.WebGLRenderTarget(this.simSize, this.simSize, {
 			wrapS: this.THREE.ClampToEdgeWrapping,
 			wrapT: this.THREE.ClampToEdgeWrapping,
 			minFilter: this.THREE.NearestFilter,
 			magFilter: this.THREE.NearestFilter,
 			format: this.THREE.RGBAFormat,
-			type: this.THREE.FloatType,
+			type: this.THREE.HalfFloatType,
 			depthBuffer: false,
 			stencilBuffer: false
 		});
+	}
+
+	private resolveResolutionScale(): number {
+		return Math.max(0.5, this.visibleSize / 256);
+	}
+
+	private resolveFrameStepCount(frameCount: number, parameters: ShallowWaterParameters): number {
+		const frames = Math.max(0, Math.round(frameCount));
+		if (frames === 0) return 0;
+
+		const stepsPerFrame = Math.max(
+			1,
+			Math.round(parameters.stepsPerFrame * this.resolveResolutionScale())
+		);
+		return frames * stepsPerFrame;
+	}
+
+	private resolveStepDamping(damping: number): number {
+		return Math.pow(damping, 1 / this.resolveResolutionScale());
 	}
 }
