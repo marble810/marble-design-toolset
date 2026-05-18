@@ -7,8 +7,8 @@
 	import { Section } from '$lib/components/shell/index.js';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import { SliderField } from '$lib/components/ui/slider-field/index.js';
-	import type { FileInputController } from '$lib/runtime/file-input/index.js';
-	import type { ImportedImageFileItem } from '$lib/types/file-input';
+	import type { ToolSourceInput } from '$lib/runtime/io/index.js';
+	import { SourceInputSection } from '$lib/components/tool-io/index.js';
 	import {
 		INIT_MAP_SOURCE_MODES,
 		RESOLUTION_OPTIONS,
@@ -18,8 +18,7 @@
 	} from '../simulation/shared.js';
 
 	interface Props {
-		fileInput: FileInputController;
-		imageItem: ImportedImageFileItem | null;
+		source: ToolSourceInput;
 		sourceMode: InitMapSourceMode;
 		preset: PresetInitMapDescriptor;
 		parameters: ShallowWaterParameters;
@@ -35,8 +34,7 @@
 	}
 
 	let {
-		fileInput,
-		imageItem,
+		source,
 		sourceMode,
 		preset,
 		parameters,
@@ -60,12 +58,6 @@
 		'vertical-bar': 'Vertical Bar'
 	};
 
-	function formatBytes(size: number): string {
-		if (size < 1024) return `${size} B`;
-		if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
-		return `${(size / (1024 * 1024)).toFixed(1)} MB`;
-	}
-
 	function updatePresetValue(nextPreset: PresetInitMapDescriptor) {
 		onPresetChange(nextPreset);
 	}
@@ -88,34 +80,11 @@
 		</label>
 
 		{#if sourceMode === 'image'}
-			{#if imageItem}
-				<div class="shallow-controls__source-info">
-					<span class="shallow-controls__source-name">{imageItem.name}</span>
-					<span class="shallow-controls__source-meta">
-						{imageItem.width} x {imageItem.height} px · {formatBytes(imageItem.size)}
-					</span>
-				</div>
-				<div class="shallow-controls__source-actions">
-					<Button variant="ghost" size="sm" onclick={() => void fileInput.pick()}>Replace</Button>
-					<Button variant="ghost" size="sm" onclick={() => fileInput.clear()}>Clear</Button>
-				</div>
-			{:else}
-				<p class="shallow-controls__hint">
-					Drop a black-and-white image onto the preview, or browse to choose an init map.
-				</p>
-				<Button
-					variant="outline"
-					size="sm"
-					onclick={() => void fileInput.pick()}
-					disabled={fileInput.busy}
-				>
-					{fileInput.busy ? 'Loading...' : 'Browse...'}
-				</Button>
-			{/if}
-
-			{#if fileInput.lastError}
-				<p class="shallow-controls__error">{fileInput.lastError.message}</p>
-			{/if}
+			<SourceInputSection
+				{source}
+				title=""
+				emptyHint="Drop a black-and-white image onto the preview, or browse to choose an init map."
+			/>
 		{:else}
 			<p class="shallow-controls__hint">
 				Use a procedural preset init map at the current simulation resolution.
@@ -335,22 +304,12 @@
 		gap: var(--space-3);
 	}
 
-	.shallow-controls__source-info,
 	.shallow-controls__field {
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-2);
 	}
 
-	.shallow-controls__source-name {
-		overflow: hidden;
-		color: var(--color-fg-primary);
-		font-size: var(--font-size-2);
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.shallow-controls__source-meta,
 	.shallow-controls__hint,
 	.shallow-controls__list {
 		color: var(--color-fg-muted);
@@ -360,19 +319,6 @@
 
 	.shallow-controls__hint {
 		margin: 0;
-	}
-
-	.shallow-controls__source-actions {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--space-2);
-	}
-
-	.shallow-controls__error {
-		margin: 0;
-		color: var(--color-danger);
-		font-size: var(--font-size-1);
-		line-height: var(--line-height-base);
 	}
 
 	.shallow-controls__caption {

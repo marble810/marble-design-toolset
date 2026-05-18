@@ -7,10 +7,8 @@
 	} from '$lib/runtime/preset-init-map.js';
 	import { onDestroy } from 'svelte';
 	import { LeftPanel, PreviewCanvas, RightPanel } from '$lib/components/shell/index.js';
-	import {
-		createFileInputController,
-		extractDroppedFiles
-	} from '$lib/runtime/file-input/index.js';
+	import { createToolSourceInput } from '$lib/runtime/io/index.js';
+	import { DropZone } from '$lib/components/tool-io/index.js';
 	import ShallowWaterControls from './components/ShallowWaterControls.svelte';
 	import ShallowWaterPreview from './components/ShallowWaterPreview.svelte';
 	import {
@@ -22,14 +20,14 @@
 		type ShallowWaterParameters
 	} from './simulation/shared.js';
 
-	const fileInput = createFileInputController({ allowedKinds: ['image'] });
-	onDestroy(() => fileInput.dispose());
+	const sourceInput = createToolSourceInput({ allowedKinds: ['image'] });
+	onDestroy(() => sourceInput.dispose());
 
 	let parameters = $state<ShallowWaterParameters>(createDefaultShallowWaterParameters());
 	let sourceMode = $state<InitMapSourceMode>(INIT_MAP_SOURCE_MODES[0]);
 	let preset = $state<PresetInitMapDescriptor>(createDefaultPresetInitMap());
 	let resimulateToken = $state(0);
-	const imageItem = $derived(fileInput.currentItem?.kind === 'image' ? fileInput.currentItem : null);
+	const imageItem = $derived(sourceInput.currentItem?.kind === 'image' ? sourceInput.currentItem : null);
 	const normalizedParameters = $derived(normalizeParameters(parameters));
 	const previewLabel = $derived(`Shallow Water Height - ${normalizedParameters.resolution}px sim`);
 	const activeInitMapSource = $derived.by<ShallowWaterInitMapSource | null>(() => {
@@ -67,23 +65,16 @@
 		preset = createDefaultPresetInitMap(kind);
 	}
 
-	async function handlePreviewDrop(event: DragEvent) {
-		event.preventDefault();
-		const imported = await fileInput.ingestFiles(extractDroppedFiles(event), 'drop');
-		if (imported?.kind === 'image') {
+	$effect(() => {
+		if (sourceInput.currentItem?.kind === 'image') {
 			sourceMode = 'image';
 		}
-	}
-
-	function handlePreviewDragOver(event: DragEvent) {
-		event.preventDefault();
-	}
+	});
 </script>
 
 <LeftPanel>
 	<ShallowWaterControls
-		fileInput={fileInput}
-		imageItem={imageItem}
+		source={sourceInput}
 		sourceMode={sourceMode}
 		preset={preset}
 		parameters={normalizedParameters}
@@ -103,12 +94,9 @@
 		defaultZoom="1:1"
 		label={previewLabel}
 	>
-		<div
-			class="shallow-water-height__drop-host"
-			role="region"
-			aria-label="Init map drop zone"
-			ondragover={handlePreviewDragOver}
-			ondrop={handlePreviewDrop}
+		<DropZone
+			source={sourceInput}
+			ariaLabel="Init map drop zone"
 		>
 			{#key normalizedParameters.resolution}
 				<ShallowWaterPreview
@@ -118,13 +106,6 @@
 					resimulateToken={resimulateToken}
 				/>
 			{/key}
-		</div>
+		</DropZone>
 	</PreviewCanvas>
 </RightPanel>
-
-<style>
-	.shallow-water-height__drop-host {
-		width: 100%;
-		height: 100%;
-	}
-</style>

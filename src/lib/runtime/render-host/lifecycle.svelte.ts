@@ -1,22 +1,20 @@
-import { onDestroy } from 'svelte';
-import { getCanvasExportContext } from '$lib/runtime/canvas-export/context';
-import { getToolSessionContext } from '$lib/runtime/tool-session-context';
 import type {
 	CanvasExporterCanvas,
 	CanvasExporterRegistrationOptions,
 	CanvasExporterRender
 } from '$lib/types/canvas-export';
 import {
-	createRenderHostLifecycleCore,
-	type AnimationScheduler,
-	type RenderHostLifecycleCore
-} from './lifecycle-core.js';
+	createToolHostLifecycle,
+	type ToolHostLifecycle,
+	type ToolHostLifecycleOptions
+} from './host-lifecycle.svelte.js';
+import type { AnimationScheduler, RenderHostLifecycleCore } from './lifecycle-core.js';
 
-export interface RenderHostLifecycleOptions {
+export interface RenderHostLifecycleOptions extends ToolHostLifecycleOptions {
 	scheduler?: AnimationScheduler;
 }
 
-export interface RenderHostLifecycle {
+export interface RenderHostLifecycle extends ToolHostLifecycle {
 	readonly isReady: boolean;
 	readonly errorMessage: string;
 	readonly isDisposed: boolean;
@@ -41,75 +39,36 @@ export interface RenderHostLifecycle {
 export function createRenderHostLifecycle(
 	options: RenderHostLifecycleOptions = {}
 ): RenderHostLifecycle {
-	const toolSessionContext = getToolSessionContext();
-	const exportContext = getCanvasExportContext();
-	let isReady = $state(false);
-	let errorMessage = $state('');
-
-	const core = createRenderHostLifecycleCore({
-		isActive: () => toolSessionContext?.isActive() ?? true,
-		scheduler: options.scheduler
-	});
-
-	onDestroy(() => core.dispose());
-
-	function setReady(ready = true): void {
-		isReady = ready;
-		if (ready) errorMessage = '';
-	}
-
-	function setError(error: unknown, fallbackMessage: string): void {
-		if (core.isDisposed) return;
-		isReady = false;
-		errorMessage = error instanceof Error ? error.message : fallbackMessage;
-	}
-
-	async function runInit(init: () => void | Promise<void>, fallbackMessage: string): Promise<void> {
-		try {
-			await init();
-			if (!core.isDisposed) setReady(true);
-		} catch (error) {
-			setError(error, fallbackMessage);
-		}
-	}
-
-	function registerCanvasExporter(
-		descriptor: CanvasExporterCanvas,
-		registrationOptions?: CanvasExporterRegistrationOptions
-	): () => void {
-		const unregister = exportContext?.register(descriptor, registrationOptions) ?? (() => {});
-		return core.addCleanup(unregister);
-	}
-
-	function registerRenderExporter(
-		descriptor: CanvasExporterRender,
-		registrationOptions?: CanvasExporterRegistrationOptions
-	): () => void {
-		const unregister = exportContext?.register(descriptor, registrationOptions) ?? (() => {});
-		return core.addCleanup(unregister);
-	}
+	const hostLifecycle = createToolHostLifecycle(options);
 
 	return {
+		get status() {
+			return hostLifecycle.status;
+		},
+		get activity() {
+			return hostLifecycle.activity;
+		},
 		get isReady() {
-			return isReady;
+			return hostLifecycle.isReady;
 		},
 		get errorMessage() {
-			return errorMessage;
+			return hostLifecycle.errorMessage;
 		},
 		get isDisposed() {
-			return core.isDisposed;
+			return hostLifecycle.isDisposed;
 		},
 		get isSessionActive() {
-			return core.isActive;
+			return hostLifecycle.isSessionActive;
 		},
-		core,
-		setReady,
-		setError,
-		runInit,
-		addCleanup: core.addCleanup,
-		startAnimationLoop: core.startAnimationLoop,
-		registerCanvasExporter,
-		registerRenderExporter,
-		dispose: core.dispose
+		core: hostLifecycle.core,
+		setReady: hostLifecycle.setReady,
+		setError: hostLifecycle.setError,
+		runInit: hostLifecycle.runInit,
+		addCleanup: hostLifecycle.addCleanup,
+		onActiveChange: hostLifecycle.onActiveChange,
+		startAnimationLoop: hostLifecycle.core.startAnimationLoop,
+		registerCanvasExporter: hostLifecycle.registerCanvasExporter,
+		registerRenderExporter: hostLifecycle.registerRenderExporter,
+		dispose: hostLifecycle.dispose
 	};
 }

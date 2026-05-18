@@ -1,4 +1,11 @@
 export {
+	createToolHostLifecycle,
+	type ToolHostLifecycle,
+	type ToolHostLifecycleActivity,
+	type ToolHostLifecycleOptions,
+	type ToolHostLifecycleStatus
+} from './host-lifecycle.svelte.js';
+export {
 	createRenderHostLifecycle,
 	type RenderHostLifecycle,
 	type RenderHostLifecycleOptions

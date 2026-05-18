@@ -5,6 +5,7 @@ export interface AnimationScheduler {
 
 export interface RenderHostLifecycleCoreOptions {
 	isActive?: () => boolean;
+	subscribeActive?: (callback: (active: boolean) => void) => () => void;
 	scheduler?: AnimationScheduler;
 }
 
@@ -12,6 +13,7 @@ export interface RenderHostLifecycleCore {
 	readonly isDisposed: boolean;
 	readonly isActive: boolean;
 	addCleanup: (cleanup: () => void) => () => void;
+	onActiveChange: (callback: (active: boolean) => void) => () => void;
 	startAnimationLoop: (callback: FrameRequestCallback) => () => void;
 	dispose: () => void;
 }
@@ -27,7 +29,9 @@ export function createRenderHostLifecycleCore(
 	const isActive = options.isActive ?? (() => true);
 	const scheduler = options.scheduler ?? browserAnimationScheduler;
 	let disposed = false;
+	let currentActive = isActive();
 	const cleanups: Array<() => void> = [];
+	const activeListeners = new Set<(active: boolean) => void>();
 
 	function addCleanup(cleanup: () => void): () => void {
 		if (disposed) {
@@ -46,13 +50,39 @@ export function createRenderHostLifecycleCore(
 		};
 	}
 
+	const unsubscribeActive =
+		options.subscribeActive?.((active) => {
+			if (disposed || active === currentActive) return;
+			currentActive = active;
+			for (const listener of [...activeListeners]) {
+				listener(active);
+			}
+		}) ?? null;
+
+	if (unsubscribeActive) {
+		addCleanup(unsubscribeActive);
+	}
+
+	function readActive(): boolean {
+		return unsubscribeActive ? currentActive : isActive();
+	}
+
+	function onActiveChange(callback: (active: boolean) => void): () => void {
+		activeListeners.add(callback);
+		callback(readActive());
+
+		return addCleanup(() => {
+			activeListeners.delete(callback);
+		});
+	}
+
 	function startAnimationLoop(callback: FrameRequestCallback): () => void {
 		let frame = 0;
 		let stopped = false;
 
 		function tick(time: number) {
 			if (disposed || stopped) return;
-			if (isActive()) {
+			if (readActive()) {
 				callback(time);
 			}
 			frame = scheduler.request(tick);
@@ -80,9 +110,10 @@ export function createRenderHostLifecycleCore(
 			return disposed;
 		},
 		get isActive() {
-			return isActive();
+			return readActive();
 		},
 		addCleanup,
+		onActiveChange,
 		startAnimationLoop,
 		dispose
 	};

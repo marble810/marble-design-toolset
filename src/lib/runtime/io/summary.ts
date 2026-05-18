@@ -45,6 +45,16 @@ export function summarizeImportedFileItem(item: ImportedFileItem): ImportedFileS
 		};
 	}
 
+	if (item.kind === 'font') {
+		return {
+			name: item.name,
+			kind: item.kind,
+			kindLabel: 'Font',
+			sizeLabel,
+			detail: `Font file · ${sizeLabel}`
+		};
+	}
+
 	return {
 		name: item.name,
 		kind: item.kind,

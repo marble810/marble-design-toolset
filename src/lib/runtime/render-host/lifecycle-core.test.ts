@@ -38,6 +38,46 @@ test('render host lifecycle disposes cleanups in reverse order and cancels anima
 	assert.deepEqual(calls, ['second', 'first']);
 });
 
+test('render host lifecycle publishes active changes without disposal', () => {
+	let emitActive: ((active: boolean) => void) | null = null;
+	let unsubscribeCalls = 0;
+	const lifecycle = createRenderHostLifecycleCore({
+		isActive: () => true,
+		subscribeActive: (callback) => {
+			emitActive = callback;
+			callback(true);
+			return () => {
+				unsubscribeCalls += 1;
+			};
+		}
+	});
+	const states: boolean[] = [];
+
+	lifecycle.onActiveChange((active) => {
+		states.push(active);
+	});
+	emitActive?.(false);
+	emitActive?.(true);
+	lifecycle.dispose();
+	emitActive?.(false);
+
+	assert.deepEqual(states, [true, false, true]);
+	assert.equal(lifecycle.isActive, true);
+	assert.equal(unsubscribeCalls, 1);
+});
+
+test('render host lifecycle runs cleanup immediately after disposal', () => {
+	const lifecycle = createRenderHostLifecycleCore();
+	lifecycle.dispose();
+	let cleaned = false;
+
+	lifecycle.addCleanup(() => {
+		cleaned = true;
+	});
+
+	assert.equal(cleaned, true);
+});
+
 function createManualScheduler(): AnimationScheduler & { tick: (time: number) => void } {
 	let nextHandle = 0;
 	let callback: FrameRequestCallback | null = null;

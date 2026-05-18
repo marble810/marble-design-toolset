@@ -1,7 +1,12 @@
 export { triggerDownload } from './download.js';
 export {
 	createToolSourceInput,
-	type ToolSourceInput
+	createToolSourceSlotCollection,
+	type ToolSourceInput,
+	type ToolSourceInputOptions,
+	type ToolSourceSlot,
+	type ToolSourceSlotCollection,
+	type ToolSourceSlotCollectionOptions
 } from './source.svelte.js';
 export {
 	formatDuration,

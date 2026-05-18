@@ -10,7 +10,10 @@
 		setToolRuntimeContext,
 		type ToolRuntimeContextValue
 	} from '$lib/runtime/tool-runtime-context';
-	import { setToolSessionContext } from '$lib/runtime/tool-session-context';
+	import {
+		setToolSessionContext,
+		type ToolSessionContextValue
+	} from '$lib/runtime/tool-session-context';
 	import { setToolShellContext, type ToolShellContextValue } from '$lib/runtime/tool-shell-context';
 	import type { ToolDefinition } from '$lib/types/tool';
 	import type { TechStackKey, TechStackModule, TechStackModuleMap } from '$lib/types/tech-stack';
@@ -50,8 +53,22 @@
 	let loadVersion = 0;
 	let nextLoadLogId = 0;
 
-	const toolSessionContext = {
-		isActive: () => isActive
+	const activeListeners = new Set<(active: boolean) => void>();
+	let previousSessionActive: boolean | null = null;
+	const toolSessionContext: ToolSessionContextValue = {
+		get active() {
+			return isActive;
+		},
+		isActive: () => toolSessionContext.active,
+		onActiveChange: (callback) => {
+			activeListeners.add(callback);
+			const currentActive = toolSessionContext.active;
+			previousSessionActive = currentActive;
+			callback(currentActive);
+			return () => {
+				activeListeners.delete(callback);
+			};
+		}
 	};
 
 	const toolShellContext = $state<ToolShellContextValue>({
@@ -96,6 +113,18 @@
 	$effect(() => {
 		if (!isActive && aboutDialogOpen) {
 			aboutDialogOpen = false;
+		}
+	});
+
+	$effect(() => {
+		const nextActive = isActive;
+		if (previousSessionActive === nextActive) {
+			return;
+		}
+
+		previousSessionActive = nextActive;
+		for (const listener of [...activeListeners]) {
+			listener(nextActive);
 		}
 	});
 

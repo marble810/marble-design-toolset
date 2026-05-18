@@ -1,5 +1,5 @@
 import metadata from './metadata.json';
-import type { ToolDefinition } from '$lib/types/tool';
+import type { ToolDefinition } from '$lib/tool-sdk/index.js';
 
 const definition = {
 	metadata,

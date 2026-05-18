@@ -4,6 +4,45 @@ import path from 'node:path';
 export const SUPPORTED_TECH_STACKS = ['three', 'pixi', 'gsap'];
 
 const REQUIRED_METADATA_FIELDS = ['name', 'desc', 'tag', 'version'];
+const CODE_FILE_EXTENSIONS = ['.svelte', '.ts', '.js'];
+const DISALLOWED_TOOL_IMPORTS = [
+	{
+		pattern: /^\$lib\/runtime\/workspace-controller(?:\/|\.|$)/,
+		reason: 'workspace controller is framework-owned internal'
+	},
+	{
+		pattern: /^\$lib\/runtime\/tool-registry(?:\/|\.|$)/,
+		reason: 'tool registry is framework-owned internal'
+	},
+	{
+		pattern: /^\$lib\/runtime\/workspace-state(?:\/|\.|$)/,
+		reason: 'workspace state is framework-owned internal'
+	},
+	{
+		pattern: /^\$lib\/runtime\/tool-shell-context(?:\/|\.|$)/,
+		reason: 'tool shell context is framework-owned internal'
+	},
+	{
+		pattern: /^\$lib\/components\/workspace(?:\/|$)/,
+		reason: 'workspace components are framework-owned shell internals'
+	},
+	{
+		pattern: /^\$lib\/components\/shell\/tool-session(?:\/|$)/,
+		reason: 'tool session mounting is framework-owned internal'
+	},
+	{
+		pattern: /^\$lib\/runtime\/canvas-export\/(?:registry|state|png|png16|mp4|mime|download)(?:\/|\.|$)/,
+		reason: 'canvas export internals are exposed to tools through the public SDK'
+	},
+	{
+		pattern: /^\$lib\/runtime\/file-input\/(?:controller-core|readers|helpers)(?:\/|\.|$)/,
+		reason: 'file input internals are exposed to tools through the public SDK'
+	},
+	{
+		pattern: /^\$lib\/runtime\/render-host\/(?:hosts|lifecycle|lifecycle-core)(?:\/|\.|$)/,
+		reason: 'render host internals are exposed to tools through the public SDK'
+	}
+];
 
 export async function validateToolsRoot(toolsRoot) {
 	const entries = await readdir(toolsRoot, { withFileTypes: true });
@@ -46,9 +85,36 @@ export async function validateToolDirectory(toolDir, toolId = path.basename(tool
 	}
 
 	errors.push(...(await validatePrivateSvelteLocations(toolDir, toolId)));
+	errors.push(...(await validateHostBoundaryImports(toolDir, toolId)));
 
 	if (entries.some((entry) => entry.isFile() && entry.name === 'index.ts')) {
 		errors.push(...(await validateDefinition(path.join(toolDir, 'index.ts'), toolId)));
+	}
+
+	return errors;
+}
+
+async function validateHostBoundaryImports(toolDir, toolId) {
+	const errors = [];
+	const codeFiles = await listFiles(toolDir, (filePath) =>
+		CODE_FILE_EXTENSIONS.includes(path.extname(filePath))
+	);
+
+	for (const filePath of codeFiles) {
+		const source = await readFile(filePath, 'utf8');
+		const relativePath = path.relative(toolDir, filePath);
+
+		for (const imported of extractImportSpecifiers(source)) {
+			const violation = DISALLOWED_TOOL_IMPORTS.find(({ pattern }) => pattern.test(imported.specifier));
+			if (!violation) continue;
+
+			errors.push(
+				createError(
+					toolId,
+					`host boundary violation in ${relativePath}:${imported.line}: ${violation.reason}; import from $lib/tool-sdk/index.js or another documented public entry instead of ${imported.specifier}`
+				)
+			);
+		}
 	}
 
 	return errors;
@@ -90,6 +156,34 @@ async function validateMetadata(metadataPath, toolId) {
 		errors.push(createError(toolId, 'metadata.json must not contain runtime techStack'));
 	}
 
+	if ('export' in metadata) {
+		errors.push(...validateExportCapabilities(metadata.export, toolId));
+	}
+
+	return errors;
+}
+
+function validateExportCapabilities(exportCapabilities, toolId) {
+	const errors = [];
+
+	if (
+		!exportCapabilities ||
+		typeof exportCapabilities !== 'object' ||
+		Array.isArray(exportCapabilities)
+	) {
+		return [createError(toolId, 'metadata.export must be an object when present')];
+	}
+
+	for (const [key, value] of Object.entries(exportCapabilities)) {
+		if (key !== 'image' && key !== 'video') {
+			errors.push(createError(toolId, `metadata.export contains unsupported field: ${key}`));
+		}
+
+		if (typeof value !== 'boolean') {
+			errors.push(createError(toolId, `metadata.export.${key} must be a boolean`));
+		}
+	}
+
 	return errors;
 }
 
@@ -125,6 +219,22 @@ async function validateDefinition(indexPath, toolId) {
 	return errors;
 }
 
+function extractImportSpecifiers(source) {
+	const specifiers = [];
+	const importPattern =
+		/(?:import\s+(?:type\s+)?[\s\S]*?\s+from\s*|import\s*\(\s*)['"]([^'"]+)['"]/g;
+	let match;
+
+	while ((match = importPattern.exec(source))) {
+		specifiers.push({
+			specifier: match[1],
+			line: lineNumberAt(source, match.index)
+		});
+	}
+
+	return specifiers;
+}
+
 function extractTechStackKeys(source) {
 	const match = source.match(/techStack\s*:\s*\[([^\]]*)\]/s);
 	if (!match) return [];
@@ -135,6 +245,16 @@ function extractTechStackKeys(source) {
 		values.push(valueMatch[1]);
 	}
 	return values;
+}
+
+function lineNumberAt(source, index) {
+	let line = 1;
+	for (let cursor = 0; cursor < index; cursor += 1) {
+		if (source[cursor] === '\n') {
+			line += 1;
+		}
+	}
+	return line;
 }
 
 async function listFiles(dir, predicate) {
