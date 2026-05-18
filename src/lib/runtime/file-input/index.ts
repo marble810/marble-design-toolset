@@ -1,5 +1,9 @@
 export {
 	createFileInputController,
+	createFileInputSlotCollection,
+	type FileInputSlot,
+	type FileInputSlotCollection,
+	type FileInputSlotCollectionOptions,
 	type FileInputController,
 	type FileInputControllerOptions,
 	type FilePickerFunction
@@ -18,6 +22,7 @@ export {
 export {
 	readFileInputItem,
 	revokeImportedFileItem,
+	type FontReadResult,
 	type FileInputReaderDependencies,
 	type ImageMetadata,
 	type VideoMetadata
@@ -29,8 +34,11 @@ export type {
 	FileInputKind,
 	FileInputSelection,
 	FileInputSource,
+	FileInputSourceSlotDefinition,
+	FileInputSourceSlotState,
 	ImportedFileItem,
 	ImportedFileItemBase,
+	ImportedFontFileItem,
 	ImportedImageFileItem,
 	ImportedTextFileItem,
 	ImportedVideoFileItem

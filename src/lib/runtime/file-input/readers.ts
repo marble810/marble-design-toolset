@@ -4,6 +4,7 @@ import type {
 	FileInputSource,
 	ImportedFileItem,
 	ImportedFileItemBase,
+	ImportedFontFileItem,
 	ImportedImageFileItem,
 	ImportedTextFileItem,
 	ImportedVideoFileItem
@@ -24,12 +25,18 @@ export interface VideoMetadata extends ImageMetadata {
 	duration: number;
 }
 
+export interface FontReadResult {
+	arrayBuffer: ArrayBuffer;
+	dataUrl: string;
+}
+
 export interface FileInputReaderDependencies {
 	createObjectUrl?: (file: File) => string;
 	revokeObjectUrl?: (objectUrl: string) => void;
 	loadImageMetadata?: (objectUrl: string) => Promise<ImageMetadata>;
 	loadVideoMetadata?: (objectUrl: string) => Promise<VideoMetadata>;
 	readText?: (file: File) => Promise<string>;
+	readFont?: (file: File) => Promise<FontReadResult>;
 }
 
 function createBaseItem(file: File, source: FileInputSource, kind: FileInputKind): ImportedFileItemBase {
@@ -65,6 +72,36 @@ function defaultRevokeObjectUrl(objectUrl: string): void {
 
 function defaultReadText(file: File): Promise<string> {
 	return file.text();
+}
+
+function getFontMimeType(file: File): string {
+	if (file.type) return file.type;
+	const extension = file.name.toLowerCase().split('.').pop();
+	if (extension === 'ttf') return 'font/ttf';
+	if (extension === 'otf') return 'font/otf';
+	if (extension === 'woff') return 'font/woff';
+	if (extension === 'woff2') return 'font/woff2';
+	return 'application/octet-stream';
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+	const bytes = new Uint8Array(buffer);
+	let binary = '';
+	const chunkSize = 0x8000;
+	for (let index = 0; index < bytes.length; index += chunkSize) {
+		const chunk = bytes.subarray(index, index + chunkSize);
+		binary += String.fromCharCode(...chunk);
+	}
+	return btoa(binary);
+}
+
+async function defaultReadFont(file: File): Promise<FontReadResult> {
+	const arrayBuffer = await file.arrayBuffer();
+	const base64 = arrayBufferToBase64(arrayBuffer);
+	return {
+		arrayBuffer,
+		dataUrl: `data:${getFontMimeType(file)};base64,${base64}`
+	};
 }
 
 function defaultLoadImageMetadata(objectUrl: string): Promise<ImageMetadata> {
@@ -228,6 +265,31 @@ async function readTextFile(
 	}
 }
 
+async function readFontFile(
+	file: File,
+	source: FileInputSource,
+	dependencies: Required<FileInputReaderDependencies>
+): Promise<ImportedFontFileItem> {
+	try {
+		const font = await dependencies.readFont(file);
+		return {
+			...createBaseItem(file, source, 'font'),
+			arrayBuffer: font.arrayBuffer,
+			dataUrl: font.dataUrl
+		};
+	} catch (error) {
+		throw toFileInputError(
+			error,
+			createFileInputError('font-read-failed', 'Failed to read font file content.', {
+				source,
+				fileName: file.name,
+				kind: 'font',
+				cause: error
+			})
+		);
+	}
+}
+
 export async function readFileInputItem(
 	file: File,
 	source: FileInputSource,
@@ -246,7 +308,8 @@ export async function readFileInputItem(
 		revokeObjectUrl: dependencies.revokeObjectUrl ?? defaultRevokeObjectUrl,
 		loadImageMetadata: dependencies.loadImageMetadata ?? defaultLoadImageMetadata,
 		loadVideoMetadata: dependencies.loadVideoMetadata ?? defaultLoadVideoMetadata,
-		readText: dependencies.readText ?? defaultReadText
+		readText: dependencies.readText ?? defaultReadText,
+		readFont: dependencies.readFont ?? defaultReadFont
 	};
 
 	if (kind === 'image') {
@@ -255,6 +318,10 @@ export async function readFileInputItem(
 
 	if (kind === 'video') {
 		return readVideoFile(file, source, resolvedDependencies);
+	}
+
+	if (kind === 'font') {
+		return readFontFile(file, source, resolvedDependencies);
 	}
 
 	return readTextFile(file, source, resolvedDependencies);

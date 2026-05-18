@@ -1,0 +1,16 @@
+{
+  "name": "Layout Smoke Test",
+  "desc": "Responsive DOM layout template recipe with source slots, fonts, and PNG export.",
+  "tag": [
+    "starter",
+    "recipe",
+    "layout",
+    "template",
+    "dom"
+  ],
+  "version": "1.0.0",
+  "enabled": true,
+  "export": {
+    "image": true
+  }
+}

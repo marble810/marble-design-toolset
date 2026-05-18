@@ -1,13 +1,15 @@
 export {
 	getCanvasExportContext,
+	registerCanvasExporterForLifecycle,
 	setCanvasExportContext
 } from './context';
+export type { LifecycleCleanupRegistrar } from './context';
 export {
 	createCanvasExportRegistry,
 	resolveCapabilities,
 	type CanvasExportRegistry
 } from './registry.svelte';
-export { exportPng8, canExportPng } from './png';
+export { exportPng8, canExportPng, __setHtmlToImageForTests } from './png';
 export {
 	exportPng16,
 	encodePng16,

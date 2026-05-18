@@ -7,7 +7,7 @@ import type {
 	ImportedFileItem
 } from '$lib/types/file-input';
 
-const KIND_ORDER: FileInputKind[] = ['image', 'video', 'text'];
+const KIND_ORDER: FileInputKind[] = ['image', 'video', 'text', 'font'];
 
 const IMAGE_EXTENSIONS = new Set([
 	'png',
@@ -21,6 +21,8 @@ const IMAGE_EXTENSIONS = new Set([
 ]);
 
 const VIDEO_EXTENSIONS = new Set(['mp4', 'webm', 'mov', 'm4v', 'ogv']);
+
+const FONT_EXTENSIONS = new Set(['ttf', 'otf', 'woff', 'woff2']);
 
 const TEXT_EXTENSIONS = new Set([
 	'txt',
@@ -48,10 +50,33 @@ const TEXT_MIME_TYPES = new Set([
 	'image/svg+xml'
 ]);
 
+const FONT_MIME_TYPES = new Set([
+	'font/ttf',
+	'font/otf',
+	'font/woff',
+	'font/woff2',
+	'application/font-sfnt',
+	'application/font-woff',
+	'application/x-font-ttf',
+	'application/x-font-otf',
+	'application/x-font-woff',
+	'application/vnd.ms-fontobject'
+]);
+
 const ACCEPT_PATTERNS: Record<FileInputKind, string[]> = {
 	image: ['image/*', '.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.avif', '.svg'],
 	video: ['video/*', '.mp4', '.webm', '.mov', '.m4v', '.ogv'],
-	text: ['text/*', '.txt', '.md', '.csv', '.json', '.yaml', '.yml', '.xml', '.svg']
+	text: ['text/*', '.txt', '.md', '.csv', '.json', '.yaml', '.yml', '.xml', '.svg'],
+	font: [
+		'font/*',
+		'.ttf',
+		'.otf',
+		'.woff',
+		'.woff2',
+		'application/font-woff',
+		'application/x-font-ttf',
+		'application/x-font-otf'
+	]
 };
 
 function getFileExtension(fileName: string): string {
@@ -89,6 +114,10 @@ export function inferFileInputKind(file: Pick<File, 'name' | 'type'>): FileInput
 
 	if (mimeType.startsWith('video/') || VIDEO_EXTENSIONS.has(extension)) {
 		return 'video';
+	}
+
+	if (mimeType.startsWith('font/') || FONT_MIME_TYPES.has(mimeType) || FONT_EXTENSIONS.has(extension)) {
+		return 'font';
 	}
 
 	if (mimeType.startsWith('text/') || TEXT_MIME_TYPES.has(mimeType) || TEXT_EXTENSIONS.has(extension)) {
@@ -166,7 +195,8 @@ export function toFileInputError(
 export function validateFileInputSelection(
 	selection: FileInputSelection,
 	allowedKinds: readonly FileInputKind[],
-	source: FileInputSource
+	source: FileInputSource,
+	options: { maxSizeBytes?: number | null } = {}
 ):
 	| { ok: true; file: File; kind: FileInputKind }
 	| { ok: false; error: FileInputError } {
@@ -204,6 +234,22 @@ export function validateFileInputSelection(
 		};
 	}
 
+	if (
+		typeof options.maxSizeBytes === 'number' &&
+		Number.isFinite(options.maxSizeBytes) &&
+		options.maxSizeBytes >= 0 &&
+		file.size > options.maxSizeBytes
+	) {
+		return {
+			ok: false,
+			error: createFileInputError(
+				'max-size-exceeded',
+				`The selected file exceeds the ${Math.round(options.maxSizeBytes / (1024 * 1024))} MB size limit.`,
+				{ source, fileName: file.name, kind }
+			)
+		};
+	}
+
 	return { ok: true, file, kind };
 }
 
@@ -230,7 +276,7 @@ export function extractDroppedFiles(input: DragEvent | DataTransfer | null | und
 }
 
 export function getImportedItemObjectUrl(item: ImportedFileItem | null | undefined): string | null {
-	if (!item || item.kind === 'text') {
+	if (!item || item.kind === 'text' || item.kind === 'font') {
 		return null;
 	}
 

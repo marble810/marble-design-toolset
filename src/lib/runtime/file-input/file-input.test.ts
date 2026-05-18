@@ -21,6 +21,7 @@ test('inferFileInputKind resolves image, video, and text from mime or extension'
 	assert.equal(inferFileInputKind(new File(['pixels'], 'texture.png', { type: 'image/png' })), 'image');
 	assert.equal(inferFileInputKind(new File(['video'], 'clip.webm', { type: 'video/webm' })), 'video');
 	assert.equal(inferFileInputKind(new File(['hello'], 'notes.md', { type: '' })), 'text');
+	assert.equal(inferFileInputKind(new File(['font'], 'display.woff2', { type: '' })), 'font');
 	assert.equal(inferFileInputKind(new File(['bytes'], 'archive.bin', { type: 'application/octet-stream' })), null);
 });
 
@@ -86,6 +87,30 @@ test('readFileInputItem normalizes text, image, and video inputs through injecte
 	assert.equal(videoItem.kind, 'video');
 	assert.equal(videoItem.objectUrl, 'blob:video');
 	assert.equal(videoItem.duration, 4.2);
+});
+
+test('readFileInputItem normalizes font inputs through injected readers', async () => {
+	const fontFile = new File(['font-bytes'], 'display.woff2', { type: 'font/woff2' });
+	const item = await readFileInputItem(fontFile, 'picker', {
+		readFont: async () => ({
+			arrayBuffer: new ArrayBuffer(4),
+			dataUrl: 'data:font/woff2;base64,AAAA'
+		})
+	});
+
+	assert.equal(item.kind, 'font');
+	assert.equal(item.name, 'display.woff2');
+	assert.equal(item.dataUrl, 'data:font/woff2;base64,AAAA');
+});
+
+test('validateFileInputSelection rejects files above maxSizeBytes without clearing callers', () => {
+	const file = new File(['12345'], 'display.woff2', { type: 'font/woff2' });
+	const result = validateFileInputSelection([file], ['font'], 'drop', { maxSizeBytes: 2 });
+	assert.equal(result.ok, false);
+	if (!result.ok) {
+		assert.equal(result.error.code, 'max-size-exceeded');
+		assert.equal(result.error.kind, 'font');
+	}
 });
 
 test('createFileInputController preserves last success and revokes object URLs on replacement and cleanup', async () => {

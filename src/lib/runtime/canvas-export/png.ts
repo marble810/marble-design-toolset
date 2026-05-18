@@ -1,5 +1,6 @@
 import type {
 	CanvasExporterDescriptor,
+	CanvasExporterDomOptions,
 	PngExportOptions,
 	ExportResult,
 	ResolvedCapabilities
@@ -59,6 +60,38 @@ async function rasterRenderKind(args: RasterArgs): Promise<Blob> {
 	return blobFromCanvas(target);
 }
 
+type HtmlToImageModule = typeof import('html-to-image');
+
+let htmlToImageForTests: HtmlToImageModule | null = null;
+
+async function loadHtmlToImage(): Promise<HtmlToImageModule> {
+	return htmlToImageForTests ?? await import('html-to-image');
+}
+
+export function __setHtmlToImageForTests(module: HtmlToImageModule | null): void {
+	htmlToImageForTests = module;
+}
+
+function mapDomExportOptions(options: CanvasExporterDomOptions | undefined): CanvasExporterDomOptions {
+	const filter = options?.filter
+		? (node: HTMLElement) => {
+				if (typeof Element === 'undefined' || !(node instanceof Element)) {
+					return true;
+				}
+
+				return options.filter?.(node) ?? true;
+			}
+		: undefined;
+
+	return {
+		backgroundColor: options?.backgroundColor,
+		filter,
+		cacheBust: options?.cacheBust,
+		style: options?.style,
+		fontEmbedCSS: options?.fontEmbedCSS
+	};
+}
+
 async function rasterDomKind(args: RasterArgs): Promise<Blob> {
 	if (args.descriptor.kind !== 'dom') {
 		throw new Error('rasterDomKind requires kind=dom');
@@ -67,45 +100,21 @@ async function rasterDomKind(args: RasterArgs): Promise<Blob> {
 	if (!element) {
 		throw new Error('Source DOM element is not available');
 	}
-	const width = args.contentWidth * args.scale;
-	const height = args.contentHeight * args.scale;
+	const htmlToImage = await loadHtmlToImage();
+	const blob = await htmlToImage.toBlob(element, {
+		width: args.contentWidth,
+		height: args.contentHeight,
+		canvasWidth: args.contentWidth * args.scale,
+		canvasHeight: args.contentHeight * args.scale,
+		pixelRatio: args.scale,
+		...mapDomExportOptions(args.descriptor.domOptions)
+	});
 
-	const cloned = element.cloneNode(true) as HTMLElement;
-	const xmlSerializer = new XMLSerializer();
-	const svgNs = 'http://www.w3.org/2000/svg';
-	const svg = document.createElementNS(svgNs, 'svg');
-	svg.setAttribute('xmlns', svgNs);
-	svg.setAttribute('width', String(width));
-	svg.setAttribute('height', String(height));
-	svg.setAttribute('viewBox', `0 0 ${args.contentWidth} ${args.contentHeight}`);
-	const fo = document.createElementNS(svgNs, 'foreignObject');
-	fo.setAttribute('x', '0');
-	fo.setAttribute('y', '0');
-	fo.setAttribute('width', String(args.contentWidth));
-	fo.setAttribute('height', String(args.contentHeight));
-	fo.appendChild(cloned);
-	svg.appendChild(fo);
-
-	const svgString = xmlSerializer.serializeToString(svg);
-	const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
-	const url = URL.createObjectURL(svgBlob);
-	try {
-		const image = new Image();
-		await new Promise<void>((resolve, reject) => {
-			image.onload = () => resolve();
-			image.onerror = () => reject(new Error('Failed to load DOM snapshot SVG'));
-			image.src = url;
-		});
-		const target = createOffscreen(width, height);
-		const ctx = target.getContext('2d');
-		if (!ctx) {
-			throw new Error('Failed to acquire 2D context');
-		}
-		ctx.drawImage(image, 0, 0, width, height);
-		return await blobFromCanvas(target);
-	} finally {
-		URL.revokeObjectURL(url);
+	if (!blob) {
+		throw new Error('DOM snapshot returned no PNG data');
 	}
+
+	return blob;
 }
 
 export async function exportPng8(args: {
@@ -132,12 +141,14 @@ export async function exportPng8(args: {
 			blob = await rasterDomKind(rasterArgs);
 		}
 		triggerDownload(blob, filename);
+		const warnings = descriptor.kind === 'dom' ? [...(descriptor.getWarnings?.() ?? [])] : [];
 		return {
 			ok: true,
 			filename,
 			mime: 'image/png',
 			extension: 'png',
-			bitDepth: 8
+			bitDepth: 8,
+			warnings: warnings.length ? warnings : undefined
 		};
 	} catch (err) {
 		return {

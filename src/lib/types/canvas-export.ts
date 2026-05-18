@@ -17,6 +17,20 @@ export interface ResolvedCapabilities {
 	pngBitDepth: PngBitDepth;
 }
 
+export interface CanvasExportDiagnostic {
+	id: string;
+	tone: 'info' | 'warning';
+	message: string;
+}
+
+export interface CanvasExporterDomOptions {
+	backgroundColor?: string;
+	filter?: (node: HTMLElement) => boolean;
+	cacheBust?: boolean;
+	style?: Partial<CSSStyleDeclaration>;
+	fontEmbedCSS?: string;
+}
+
 export interface RenderFrameContext {
 	canvas: HTMLCanvasElement;
 	time: number;
@@ -66,6 +80,8 @@ export interface CanvasExporterRender extends CanvasExporterContentSize {
 export interface CanvasExporterDom extends CanvasExporterContentSize {
 	kind: 'dom';
 	getElement: () => HTMLElement | null;
+	domOptions?: CanvasExporterDomOptions;
+	getWarnings?: () => readonly string[];
 	capabilities?: Omit<CapabilityFlags, 'mp4' | 'pngBitDepth'>;
 }
 
@@ -105,6 +121,7 @@ export interface ExportResult {
 	mime?: string;
 	extension?: string;
 	bitDepth?: PngBitDepth;
+	warnings?: string[];
 	error?: string;
 	notice?: string;
 }

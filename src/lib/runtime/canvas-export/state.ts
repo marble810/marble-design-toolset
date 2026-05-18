@@ -1,4 +1,6 @@
-import type { ExportResult, RegisteredExporter } from '$lib/types/canvas-export';
+import type { CanvasExportDiagnostic, ExportResult, RegisteredExporter } from '$lib/types/canvas-export';
+
+export type { CanvasExportDiagnostic } from '$lib/types/canvas-export';
 
 export interface ExporterSelectOption {
 	value: string;
@@ -8,12 +10,6 @@ export interface ExporterSelectOption {
 export interface ExporterSelectionResult {
 	selectedExporterId: string;
 	selectionLostMessage: string;
-}
-
-export interface CanvasExportDiagnostic {
-	id: string;
-	tone: 'info' | 'warning';
-	message: string;
 }
 
 export interface CanvasExportDiagnosticsInput {
@@ -108,6 +104,17 @@ export function createCanvasExportDiagnostics({
 			id: 'video-browser-unsupported',
 			tone: 'warning',
 			message: 'Video recording is not available in this browser.'
+		});
+	}
+
+	for (const [index, warning] of (activeExporter.descriptor.kind === 'dom'
+		? activeExporter.descriptor.getWarnings?.() ?? []
+		: []
+	).entries()) {
+		diagnostics.push({
+			id: `exporter-warning-${index}`,
+			tone: 'warning',
+			message: warning
 		});
 	}
 

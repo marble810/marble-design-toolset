@@ -20,8 +20,11 @@ async function main() {
 		});
 
 		console.log(`\nCreated ${result.displayName} at ${path.relative(process.cwd(), result.toolDir)}`);
+		if (result.recipeId && result.recipeId !== 'custom') {
+			console.log(`Recipe: ${result.recipeId}`);
+		}
 		console.log('Next steps:');
-		console.log(`  1. Open src/tools/${result.toolId}/ and replace the placeholder UI.`);
+		console.log(`  1. Open src/tools/${result.toolId}/ and adapt the generated recipe wiring.`);
 		console.log('  2. Run npm run build to verify the generated tool.');
 	} finally {
 		rl.close();

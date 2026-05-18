@@ -1,4 +1,4 @@
-export type FileInputKind = 'image' | 'video' | 'text';
+export type FileInputKind = 'image' | 'video' | 'text' | 'font';
 
 export type FileInputSource = 'picker' | 'drop';
 
@@ -9,6 +9,8 @@ export type FileInputErrorCode =
 	| 'picker-unavailable'
 	| 'picker-failed'
 	| 'text-read-failed'
+	| 'font-read-failed'
+	| 'max-size-exceeded'
 	| 'image-metadata-failed'
 	| 'video-metadata-failed';
 
@@ -51,10 +53,17 @@ export interface ImportedTextFileItem extends ImportedFileItemBase {
 	text: string;
 }
 
+export interface ImportedFontFileItem extends ImportedFileItemBase {
+	kind: 'font';
+	arrayBuffer: ArrayBuffer;
+	dataUrl: string;
+}
+
 export type ImportedFileItem =
 	| ImportedImageFileItem
 	| ImportedVideoFileItem
-	| ImportedTextFileItem;
+	| ImportedTextFileItem
+	| ImportedFontFileItem;
 
 export interface FileInputControllerState {
 	accept: string;
@@ -65,3 +74,21 @@ export interface FileInputControllerState {
 }
 
 export type FileInputSelection = Iterable<File> | ArrayLike<File> | null | undefined;
+
+export interface FileInputSourceSlotDefinition {
+	id: string;
+	name: string;
+	desc: string;
+	allowedKinds?: readonly FileInputKind[];
+	required?: boolean;
+	accept?: string;
+	maxSizeMB?: number;
+}
+
+export interface FileInputSourceSlotState extends FileInputControllerState {
+	id: string;
+	name: string;
+	desc: string;
+	required: boolean;
+	maxSizeMB: number | null;
+}

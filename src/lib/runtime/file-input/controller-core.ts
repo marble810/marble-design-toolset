@@ -42,6 +42,7 @@ export interface FileInputControllerCoreState {
 export interface FileInputControllerCoreConfig {
 	accept: string;
 	allowedKinds: readonly FileInputKind[];
+	maxSizeBytes?: number | null;
 	pickFiles: FilePickerFunction;
 	readItem: (
 		file: File,
@@ -60,7 +61,9 @@ export function createFileInputControllerCore(
 		selection: FileInputSelection,
 		source: FileInputSource = 'drop'
 	): Promise<ImportedFileItem | null> {
-		const validated = validateFileInputSelection(selection, config.allowedKinds, source);
+		const validated = validateFileInputSelection(selection, config.allowedKinds, source, {
+			maxSizeBytes: config.maxSizeBytes
+		});
 		if (!validated.ok) {
 			state.setBusy(false);
 			state.setLastError(validated.error);

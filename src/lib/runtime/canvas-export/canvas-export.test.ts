@@ -13,6 +13,7 @@ import {
 	__resetFastPngForTests,
 	__setFastPngForTests
 } from './png16.ts';
+import { __setHtmlToImageForTests, exportPng8 } from './png.ts';
 import { defaultExportFilename } from './download.ts';
 import {
 	createCanvasExportDiagnostics,
@@ -21,7 +22,12 @@ import {
 	runCanvasExportTask,
 	type CanvasExportRunState
 } from './state.ts';
-import type { CanvasExporterDescriptor, RegisteredExporter } from '../../types/canvas-export.ts';
+import { registerCanvasExporterForLifecycle } from './context.ts';
+import type {
+	CanvasExportContextValue,
+	CanvasExporterDescriptor,
+	RegisteredExporter
+} from '../../types/canvas-export.ts';
 
 // ---------------------------------------------------------------------------
 // resolveCapabilities — pure function, covers spec scenarios for capability gating.
@@ -136,6 +142,40 @@ test('removeRegisteredExporter removes the registered exporter by id', () => {
 	assert.deepEqual(removeRegisteredExporter([first, second], first.id), [second]);
 });
 
+test('registerCanvasExporterForLifecycle unregisters during lifecycle cleanup', () => {
+	const descriptor = createCanvasDescriptor();
+	const cleanups: Array<() => void> = [];
+	let registerCalls = 0;
+	let unregisterCalls = 0;
+	const context: CanvasExportContextValue = {
+		exporters: [],
+		register: (registeredDescriptor, options) => {
+			assert.equal(registeredDescriptor, descriptor);
+			assert.deepEqual(options, { id: 'preview', label: 'Preview' });
+			registerCalls += 1;
+			return () => {
+				unregisterCalls += 1;
+			};
+		}
+	};
+
+	const unregister = registerCanvasExporterForLifecycle(
+		context,
+		descriptor,
+		(cleanup) => {
+			cleanups.push(cleanup);
+			return cleanup;
+		},
+		{ id: 'preview', label: 'Preview' }
+	);
+
+	assert.equal(registerCalls, 1);
+	assert.equal(unregisterCalls, 0);
+	cleanups[0]();
+	unregister();
+	assert.equal(unregisterCalls, 1);
+});
+
 test('exporter selection falls back when the selected exporter disappears', () => {
 	const exporters = [createRegisteredExporter('primary', 'Primary'), createRegisteredExporter('alt', 'Alt')];
 
@@ -175,6 +215,139 @@ test('createCanvasExportDiagnostics reports missing exporters and capability mis
 		mismatchDiagnostics.map((diagnostic) => diagnostic.id),
 		['exporter-lost', 'image-unsupported', 'video-browser-unsupported']
 	);
+});
+
+test('createCanvasExportDiagnostics includes DOM exporter warnings', () => {
+	const diagnostics = createCanvasExportDiagnostics({
+		declaredImage: true,
+		declaredVideo: false,
+		activeExporter: {
+			id: 'dom',
+			label: 'DOM',
+			descriptor: {
+				kind: 'dom',
+				contentWidth: 100,
+				contentHeight: 100,
+				getElement: () => null,
+				getWarnings: () => ['Font fallback used.']
+			},
+			resolved: { png: true, mp4: false, pngBitDepth: 8 }
+		},
+		browserMp4Available: true
+	});
+
+	assert.equal(diagnostics.at(-1)?.message, 'Font fallback used.');
+});
+
+test('exportPng8 maps DOM export options to html-to-image and preserves scale sizing', async () => {
+	const originalDocument = globalThis.document;
+	const originalHTMLElement = globalThis.HTMLElement;
+	const originalTrigger = globalThis.URL;
+	const element = {} as HTMLElement;
+	let capturedOptions: unknown = null;
+	let createdDownload = '';
+
+	(globalThis as { HTMLElement?: unknown }).HTMLElement = class {};
+	(globalThis as { document?: unknown }).document = {
+		body: { appendChild: () => {} },
+		createElement: (tagName: string) => {
+			if (tagName === 'a') {
+				return {
+					href: '',
+					download: '',
+					click: () => {},
+					remove: () => {}
+				};
+			}
+			return {
+				width: 0,
+				height: 0,
+				getContext: () => ({
+					imageSmoothingEnabled: false,
+					drawImage: () => {}
+				}),
+				toBlob: (callback: (blob: Blob) => void) => callback(new Blob(['png'], { type: 'image/png' }))
+			};
+		}
+	};
+	(globalThis as { URL?: unknown }).URL = {
+		createObjectURL: () => {
+			createdDownload = 'blob:download';
+			return createdDownload;
+		},
+		revokeObjectURL: () => {}
+	};
+	__setHtmlToImageForTests({
+		toBlob: async (_node, options) => {
+			capturedOptions = options;
+			return new Blob(['png'], { type: 'image/png' });
+		}
+	} as unknown as typeof import('html-to-image'));
+
+	try {
+		const result = await exportPng8({
+			descriptor: {
+				kind: 'dom',
+				contentWidth: 1080,
+				contentHeight: 720,
+				getElement: () => element,
+				domOptions: {
+					backgroundColor: '#fff',
+					cacheBust: true,
+					style: { overflow: 'hidden' }
+				},
+				getWarnings: () => ['Font fallback used.']
+			},
+			contentWidth: 1080,
+			contentHeight: 720,
+			options: { scale: 4, bitDepth: 8, filename: 'layout' }
+		});
+
+		assert.equal(result.ok, true);
+		assert.equal(result.warnings?.[0], 'Font fallback used.');
+		assert.equal((capturedOptions as { canvasWidth: number }).canvasWidth, 4320);
+		assert.equal((capturedOptions as { canvasHeight: number }).canvasHeight, 2880);
+		assert.equal((capturedOptions as { pixelRatio: number }).pixelRatio, 4);
+		assert.equal((capturedOptions as { backgroundColor: string }).backgroundColor, '#fff');
+		assert.equal(createdDownload, 'blob:download');
+	} finally {
+		__setHtmlToImageForTests(null);
+		(globalThis as { document?: unknown }).document = originalDocument;
+		(globalThis as { HTMLElement?: unknown }).HTMLElement = originalHTMLElement;
+		(globalThis as { URL?: unknown }).URL = originalTrigger;
+	}
+});
+
+test('exportPng8 wraps DOM filter so non-element nodes do not throw', async () => {
+	let capturedFilter: ((node: HTMLElement) => boolean) | undefined;
+
+	__setHtmlToImageForTests({
+		toBlob: async (_node, options) => {
+			capturedFilter = options?.filter;
+			return new Blob(['png'], { type: 'image/png' });
+		}
+	} as unknown as typeof import('html-to-image'));
+
+	try {
+		await exportPng8({
+			descriptor: {
+				kind: 'dom',
+				contentWidth: 100,
+				contentHeight: 100,
+				getElement: () => ({}) as HTMLElement,
+				domOptions: {
+					filter: (node) => !node.hasAttribute('data-export-hidden')
+				}
+			},
+			contentWidth: 100,
+			contentHeight: 100,
+			options: { scale: 1, bitDepth: 8, filename: 'layout' }
+		});
+
+		assert.equal(capturedFilter?.({} as HTMLElement), true);
+	} finally {
+		__setHtmlToImageForTests(null);
+	}
 });
 
 // ---------------------------------------------------------------------------

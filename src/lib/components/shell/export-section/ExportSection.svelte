@@ -327,6 +327,9 @@
 				{#if lastResult.notice}
 					<span class="export-section__notice">{lastResult.notice}</span>
 				{/if}
+				{#each lastResult.warnings ?? [] as warning}
+					<span class="export-section__notice">{warning}</span>
+				{/each}
 			{:else}
 				<span>Export failed: {lastResult.error}</span>
 			{/if}
