@@ -171,3 +171,50 @@ Framework SHALL 为导出文件提供默认文件名 `<tool-id>-<yyyymmdd-hhmmss
 - **WHEN** 用户在 panel 中把文件名覆写为 `marble-test`
 - **THEN** 下载的文件名为 `marble-test.png`（或对应的 `.mp4` / `.webm`），扩展名仍由 framework 决定
 
+### Requirement: Exporter 注册生命周期与统一 host lifecycle 对齐
+Canvas export runtime SHALL 允许 tool 或 helper 在统一 host lifecycle 语义下注册和注销 exporter。凡是由 lifecycle-aware helper 协助注册的 exporter，framework MUST 在对应 lifecycle cleanup 阶段自动注销，避免把无效 exporter 留在当前会话中。
+
+#### Scenario: 生命周期驱动的 exporter 注销
+- **WHEN** 一个 tool 通过统一 host lifecycle 协助注册 exporter，随后对应组件销毁或会话结束
+- **THEN** framework 自动注销该 exporter，并且 Export UI 不再尝试调用它
+
+#### Scenario: Tool 进入非活动状态
+- **WHEN** 一个已注册 exporter 的 tool 从 active 切换为 inactive
+- **THEN** exporter 是否继续可用由统一 host lifecycle 定义的策略决定，但其状态变化仍受同一套生命周期语义约束
+
+### Requirement: DOM PNG export uses html-to-image internally
+Framework SHALL implement `kind: 'dom'` PNG export using `html-to-image` or an equivalent DOM capture adapter that preserves computed styles, CSS variables, fonts, and images more reliably than a raw DOM clone. The dependency MUST be hidden behind the framework export runtime and MUST NOT require tool authors to import `html-to-image` directly.
+
+#### Scenario: DOM exporter is exported as PNG
+- **WHEN** the active exporter has `kind: 'dom'` and the user starts PNG export
+- **THEN** the framework captures the exporter element through the DOM capture adapter and downloads a PNG using the existing Export panel task flow
+
+#### Scenario: Tool does not import DOM capture library
+- **WHEN** a layout tool registers a DOM exporter through the framework or layout controller
+- **THEN** the tool only provides an element getter and dimensions, and the framework owns the DOM capture implementation
+
+### Requirement: DOM export supports framework-defined safe options
+DOM exporters SHALL support a framework-defined set of safe DOM export options: `backgroundColor`, `filter`, `cacheBust`, and `style` overrides. Framework MUST map these options to the internal DOM capture adapter and MUST NOT expose a full third-party options passthrough as the stable tool API.
+
+#### Scenario: Tool excludes editing overlays
+- **WHEN** a DOM exporter provides a `filter` option that excludes helper nodes
+- **THEN** the PNG export omits those nodes while preserving the rest of the layout DOM
+
+#### Scenario: Tool sets export background
+- **WHEN** a DOM exporter provides a `backgroundColor`
+- **THEN** the exported PNG uses that background color according to framework DOM export behavior
+
+### Requirement: DOM export preserves Export panel scale and content size semantics
+DOM PNG export SHALL continue to honor the existing Export panel scale choices and exporter `contentWidth` / `contentHeight`. The output PNG pixel size MUST equal `contentWidth × scale` by `contentHeight × scale`.
+
+#### Scenario: User exports DOM layout at 4x
+- **WHEN** a DOM exporter reports `contentWidth = 1080` and `contentHeight = 1080`, and the user selects scale `4`
+- **THEN** the downloaded PNG is `4320 × 4320` pixels
+
+### Requirement: DOM export can surface warnings
+DOM export SHALL support warning diagnostics for recoverable degradation such as font fallback. Warnings MUST be visible through framework export result or diagnostics UI without treating the export as a successful silent match.
+
+#### Scenario: Font fallback occurs during DOM export
+- **WHEN** a layout controller reports that a requested Google Font fell back to a system font
+- **THEN** the Export panel can display a warning while still allowing PNG export
+

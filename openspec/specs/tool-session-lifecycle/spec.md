@@ -2,7 +2,6 @@
 
 ## Purpose
 定义 Marble Design Toolset 中工具标签会话的保活、销毁、活动状态切换和实例身份稳定语义。
-
 ## Requirements
 ### Requirement: 已打开工具会话在标签切换时保持挂载
 工作区 SHALL 为每个已打开工具维护一个稳定的工具会话。只要标签页仍处于打开状态，切换活动标签 MUST NOT 销毁或重新创建该工具会话。
@@ -27,3 +26,15 @@
 - **WHEN** 工具 A 和工具 B 都已打开，且用户把活动标签从工具 A 切换到工具 B
 - **THEN** 工具 A 会话变为非活动状态但保持挂载
 - **THEN** 工具 B 会话变为活动状态且不创建重复实例
+
+### Requirement: Tool session active 状态参与统一 host lifecycle
+Tool session lifecycle SHALL 将 active / inactive 状态作为统一 host lifecycle 的核心阶段之一暴露给 tool。状态切换 MUST NOT 触发会话重建，但 MUST 能被 lifecycle-aware helper 和 tool 消费，用于暂停、恢复或延迟宿主相关任务。
+
+#### Scenario: 活动标签切换
+- **WHEN** 一个已打开 tool 从活动标签切换为非活动标签
+- **THEN** 该 tool 的统一 host lifecycle 进入 inactive 阶段，而不会触发会话重建
+
+#### Scenario: 工具重新激活
+- **WHEN** 非活动 tool 再次成为活动标签
+- **THEN** 统一 host lifecycle 回到 active 阶段，tool 可以据此恢复宿主相关任务
+

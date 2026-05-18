@@ -176,3 +176,36 @@ ToolDefinition SHALL 支持声明 menu actions 及其运行时处理入口。工
 - **WHEN** 浏览器以有效工具 hash 打开工作区
 - **THEN** 对应工具被加入标签集合并成为活动工具，行为与拆分前一致
 
+### Requirement: Tool runtime 依赖面限定在 public host boundary
+Tool runtime SHALL 将 public host boundary 视为唯一受支持的宿主依赖面。Tool 可以依赖稳定 SDK、公开 capability 和 extension point；framework internal runtime 模块、controller 细节和私有 helper MUST NOT 被视为长期可依赖 contract。
+
+#### Scenario: 新 tool 接入宿主 runtime
+- **WHEN** 作者创建一个新 tool 并接入 runtime context、IO、export 或 lifecycle 能力
+- **THEN** 该 tool 通过 public host boundary 完成接入，而不是直接导入 internal runtime 模块
+
+#### Scenario: 旧 tool 继续依赖 internal 路径
+- **WHEN** 一个现有 tool 仍使用历史 internal import 路径
+- **THEN** framework 可以在兼容窗口内继续支持它，但该路径不会被文档和脚手架继续推荐
+
+### Requirement: Tool contract validation 检查 host boundary 违规
+仓库的 tool contract validation SHALL 能检测 tool 是否越过 public host boundary 直接依赖 internal framework 模块。发现违规时，validation MUST 报告对应 tool 与违规导入位置。
+
+#### Scenario: Tool 导入 internal workspace controller
+- **WHEN** 某个 tool 直接导入被标记为 internal 的 workspace controller 或 runtime helper
+- **THEN** contract validation 失败并指出该 tool 存在 boundary 违规
+
+#### Scenario: Tool 只依赖 public SDK
+- **WHEN** 某个 tool 仅从 public SDK 和公开 capability 入口导入宿主能力
+- **THEN** contract validation 不会因为 boundary 规则而报错
+
+### Requirement: Tool runtime 公共能力通过稳定 SDK 暴露
+Tool runtime SHALL 为 tool 作者提供稳定的公共能力入口，使 tool 可以在保持现有目录 schema 和运行时定义 contract 不变的前提下，通过稳定 SDK 读取 runtime context、共享 capability 和推荐 helper。Framework MUST NOT 要求 tool 直接依赖深层 internal 模块路径才能完成标准接入。
+
+#### Scenario: Tool 使用稳定 SDK 读取运行时服务
+- **WHEN** 一个新 tool 需要读取自身 `toolId`、session active 状态或共享 capability
+- **THEN** 它可以通过稳定 SDK 完成接入，而无需直接导入 framework internal 模块
+
+#### Scenario: 旧 tool 未迁移到稳定 SDK
+- **WHEN** 一个现有 tool 仍然使用历史导入路径
+- **THEN** 在兼容窗口内该 tool 继续可加载和渲染，且不因本次 change 被立即打破
+
