@@ -14,7 +14,10 @@
 				</div>
 				<h1 class="docs-home__title">Choose a document from the sidebar.</h1>
 				<p class="docs-home__copy">
-					This browser reads the repository docs tree directly and renders each Markdown page as a static docs route.
+					This browser reads the repository docs tree and renders each Markdown page as a static route.
+					Docs are organized by audience: <strong>For Framework Developers</strong> covers runtime internals,
+					public SDK and boundary maintenance; <strong>For Tool Developers</strong> covers creating tools,
+					recipes, and using the public SDK.
 				</p>
 
 				{#if data.firstDoc}

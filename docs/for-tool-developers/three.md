@@ -1,14 +1,26 @@
-# Making Tools with Three.js
+# 使用 Three.js 编写 Tool
 
 本指南说明如何在 Marble Design Toolset 中编写 Three.js 工具。重点不是 Three.js 本身，而是如何把 WebGL 生命周期接入 framework：tool 只渲染自己的左侧控制与右侧舞台，技术栈加载、session active、导出注册和资源释放都优先复用共享 runtime。
 
 ## TL;DR
 
-1. 运行 `bun run create:tool`，选择 `stage` starter，并声明 `three` tech stack。
-2. master `.svelte` 只组合 `LeftPanel`、`RightPanel`、`FullStage` 和私有 Three 子组件。
-3. Three 子组件使用 `createRenderHostLifecycle()` 与 `createThreeRenderHost(renderHost)`。
+1. 运行 `bun run create:tool`，优先选择 `three-stage` recipe。
+2. 脚手架会声明 `techStack: ['three']`，master `.svelte` 只组合 `LeftPanel`、`RightPanel`、`FullStage` 和私有 Three 子组件。
+3. Three 子组件继续使用公共 SDK 的 `createRenderHostLifecycle()` 与 `createThreeRenderHost(renderHost)`。
 4. 渲染循环使用 `renderHost.startAnimationLoop(...)`，隐藏 tab 时会自动暂停。
-5. 需要导出时声明 metadata `export` 能力，并用 canvas export runtime 注册 exporter；不要手写下载按钮或文件 IO。
+5. 需要导出时声明 metadata `export` 能力，并用公共 SDK 暴露的 render host / export context 注册 exporter；不要手写下载按钮或文件 IO。
+
+## 统一 Host Lifecycle
+
+Three 工具应优先使用 `createRenderHostLifecycle()`。它在 render host 上组合了统一的 host lifecycle 语义：
+
+- `runInit(...)` 管理 Three renderer、scene、camera 等宿主资源初始化，并统一 ready / error 状态。
+- `isSessionActive` 与 `onActiveChange(...)` 反映 workspace tab 的 active / inactive；tab 隐藏不会销毁或重建 Three 会话。
+- `startAnimationLoop(...)` 只在 active 时调用帧回调，inactive 时暂停，重新 active 后继续。
+- `addCleanup(...)` 统一释放 renderer、geometry、material、texture、ResizeObserver 等资源。
+- `registerCanvasExporter(...)` / `registerRenderExporter(...)` 会把 exporter 注册挂到同一条 lifecycle，组件销毁或会话结束时自动注销。
+
+这层 helper 只处理宿主生命周期，不接管 Three scene graph、shader、simulation step 或参数模型。若某个工具不用 render host，但仍需要 init、active、cleanup 和 exporter 自动注销语义，可以从公共 SDK 直接使用 `createToolHostLifecycle()`。
 
 ## 目录与 Definition
 
@@ -27,7 +39,7 @@ src/tools/model-viewer/
 
 ```ts
 import metadata from './metadata.json';
-import type { ToolDefinition } from '$lib/types/tool';
+import type { ToolDefinition } from '$lib/tool-sdk/index.js';
 
 const definition = {
 	metadata,
@@ -106,7 +118,7 @@ Three 子组件持有 WebGL 资源。推荐使用 render host lifecycle 管理�
 	import {
 		createRenderHostLifecycle,
 		createThreeRenderHost
-	} from '$lib/runtime/render-host/index.js';
+	} from '$lib/tool-sdk/index.js';
 
 	interface Props {
 		wireframe: boolean;

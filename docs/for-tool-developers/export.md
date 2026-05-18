@@ -1,8 +1,8 @@
-# Tool Export Guide
+# Tool 导出指南
 
 把 tool 渲染的内容导出为 **PNG** 或 **MP4 / WebM** 是 framework 提供的开箱能力。本指南面向 tool 作者，覆盖从声明能力到注册 exporter、再到调试导出失败的完整流程。
 
-> 阅读前提：建议先看完 [`tool-authoring-guide.md`](./tool-authoring-guide.md)，了解 tool 目录 schema、`metadata.json` 与 `index.ts` 的关系，以及 `LeftPanel` / `Section` / `PreviewCanvas` / `FullStage` 的角色分工。
+> 阅读前提：建议先看完 [`create-a-tool.md`](./create-a-tool.md)，了解 tool 目录 schema、`metadata.json` 与 `index.ts` 的关系，以及 `LeftPanel` / `Section` / `PreviewCanvas` / `FullStage` 的角色分工。
 
 ## 目录
 
@@ -32,6 +32,8 @@
    - 两者解耦：tool 还在 lazy-load 时 LeftPanel 也能预渲染稳定结构（按钮 disabled + 提示）。
 3. **容器无关**：Export context 由顶层 `ToolShell` 注入，PreviewCanvas、FullStage、自定义右侧内容内的任何子组件都可以注册 exporter。
 4. **零首屏开销**：`fast-png`（16-bit 编码）通过 `await import(...)` 懒加载，仅在用户真正点击 16-bit 导出时下载。
+
+tool 作者应从 `$lib/tool-sdk/index.js` 导入 `getCanvasExportContext`、descriptor 类型和 render host helper。`$lib/runtime/canvas-export/*` 是 framework internal；历史代码在兼容窗口内可继续工作，但新代码和示例不应直接依赖这些路径。
 
 ---
 
@@ -89,7 +91,7 @@
 <!-- ② components/MyPreview.svelte -->
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getCanvasExportContext } from '$lib/runtime/canvas-export/context';
+  import { getCanvasExportContext } from '$lib/tool-sdk/index.js';
 
   let canvas: HTMLCanvasElement;
   let width = $state(512);
@@ -193,7 +195,7 @@ interface CanvasExporterContentSize {
 
 ```ts
 import { onMount } from 'svelte';
-import { getCanvasExportContext } from '$lib/runtime/canvas-export/context';
+import { getCanvasExportContext } from '$lib/tool-sdk/index.js';
 
 // 在组件初始化期读取 context（script 顶层）
 const exportContext = getCanvasExportContext();
@@ -516,18 +518,22 @@ exportContext?.register({
 
 ## API Reference
 
-> 完整类型定义见 [`src/lib/types/canvas-export.ts`](../../../src/lib/types/canvas-export.ts)。
+> tool-facing 类型从 `$lib/tool-sdk/index.js` 导入；底层定义仍在 `src/lib/types/canvas-export.ts`，但不作为新 tool 的默认导入路径。
 
 ### Context
 
 ```ts
 import {
   getCanvasExportContext,
-  setCanvasExportContext
-} from '$lib/runtime/canvas-export/context';
+  type CanvasExportContextValue,
+  type CanvasExporterDescriptor,
+  type RegisteredExporter
+} from '$lib/tool-sdk/index.js';
 
-// 仅在 ToolShell.svelte 内部使用，tool 不应调用 set
-type CanvasExportContextValue = {
+const exportContext: CanvasExportContextValue | undefined = getCanvasExportContext();
+
+// CanvasExportContextValue 的简化形状：
+type ExportContextShape = {
   exporters: ReadonlyArray<RegisteredExporter>;
   register: (
     descriptor: CanvasExporterDescriptor,
@@ -536,7 +542,7 @@ type CanvasExportContextValue = {
 };
 ```
 
-如果使用 `src/lib/runtime/render-host/`，可以让 lifecycle helper 自动注销 exporter：
+如果使用公共 SDK 中的 render host helper，可以让 lifecycle 自动注销 exporter：
 
 ```ts
 const renderHost = createRenderHostLifecycle();
@@ -584,16 +590,9 @@ interface ResolvedCapabilities {
 }
 ```
 
-### 工具函数（一般 tool 不需要直接用）
+### Framework 内部导出工具
 
-```ts
-import {
-  isMp4ExportAvailable,    // boolean，检查浏览器是否支持任何录制 MIME
-  pickRecorderMime,        // 返回 { mime, extension } | null
-  defaultExportFilename,   // (toolId) => '<toolId>-YYYYMMDD-HHmmss'
-  triggerDownload          // (blob, filename) => void
-} from '$lib/runtime/canvas-export';
-```
+`isMp4ExportAvailable`、`pickRecorderMime`、`defaultExportFilename` 等编码和文件命名工具由 Export Section 内部使用，不是推荐的 tool-facing API。tool 如果只需要普通下载 primitive，可从 `$lib/tool-sdk/index.js` 使用 `triggerDownload`。
 
 ### 元数据类型
 

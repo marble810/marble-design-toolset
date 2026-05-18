@@ -1,4 +1,4 @@
-# Tool File Input Guide
+# Tool 文件输入指南
 
 ## 适用范围
 
@@ -12,14 +12,16 @@
 
 首版能力只承诺单次维护一个当前输入结果，不负责多文件编排、目录导入、剪贴板粘贴或远程 URL 抓取。
 
-## 推荐入口模块
+## 默认 public surface
 
-tool 作者优先从两个稳定入口组合文件来源：
+tool 作者默认从 `$lib/tool-sdk/index.js` 进入本地文件来源能力：
 
-- `src/lib/runtime/io/`：`createToolSourceInput`、文件摘要和下载 primitive
-- `src/lib/components/tool-io/`：`SourceInputSection` 与 `DropZone`
+- `createToolSourceInput`：推荐的 source workflow facade
+- `SourceInputSection`、`DropZone`：可选共享 UI，可以和同一个 workflow 对象组合使用
+- `ToolSourceInput`、`ToolSourceInputOptions`、`ImportedFileItem` 等类型
+- `triggerDownload`、文件摘要 helper，以及少量底层 escape hatch
 
-底层文件输入管道仍位于 `src/lib/runtime/file-input/`，共享类型位于 `src/lib/types/file-input.ts`。只有在需要自定义 UI 或特殊 ingest 流程时，才直接使用底层 controller。
+`src/lib/runtime/file-input/` 仍是稳定底层 primitive，并继续承担 picker、drop、校验、读取、错误和对象 URL 清理语义。新 tool 不需要先理解这层；只有在 facade 无法表达特殊流程时，才使用公共 SDK 暴露的低层 escape hatch（例如 `createFileInputController`、`readFileInputItem`、`extractDroppedFiles`）。
 
 ## 推荐模式：Source workflow
 
@@ -28,8 +30,11 @@ tool 作者优先从两个稳定入口组合文件来源：
 ```svelte
 <script lang="ts">
   import { onDestroy } from 'svelte';
-  import { SourceInputSection, DropZone } from '$lib/components/tool-io/index.js';
-  import { createToolSourceInput } from '$lib/runtime/io/index.js';
+  import {
+    createToolSourceInput,
+    DropZone,
+    SourceInputSection
+  } from '$lib/tool-sdk/index.js';
 
   const sourceInput = createToolSourceInput({ allowedKinds: ['image', 'video'] });
   const sourceItem = $derived(sourceInput.currentItem);
@@ -74,7 +79,7 @@ workflow 暴露这些状态和动作：
 
 ## 底层 controller 仍可用
 
-`SourceInputSection` / `DropZone` 覆盖多数工具场景。如果你确实需要完全自定义 UI，可以继续直接使用底层 `createFileInputController`，但仍必须遵守统一的 `accept`、`ingestFiles(...)`、`clear()` 和 `dispose()` 语义。
+`createToolSourceInput` 覆盖多数工具场景：你可以复用 `SourceInputSection` / `DropZone`，也可以只用 facade 自己绘制 UI。如果确实需要绕过 facade，可以从 `$lib/tool-sdk/index.js` 使用 `createFileInputController`、`readFileInputItem`、`extractDroppedFiles` 等 escape hatch，但仍必须遵守统一的 `accept`、`ingestFiles(...)`、`clear()` 和 `dispose()` 语义。
 
 ## picker 与隐藏 input
 
@@ -105,7 +110,7 @@ async function handlePick() {
 
 ## 拖放接入
 
-拖放入口不要自己解析 `DataTransferItemList`。统一使用 `extractDroppedFiles(event)` 再交给控制器：
+如果使用 `DropZone` 或 `sourceInput.handleDrop(event)`，拖放解析已经由 facade 处理。只有在自定义低层 controller UI 时，才需要从公共 SDK 使用 `extractDroppedFiles(event)` 再交给控制器：
 
 ```ts
 function handleDrop(event: DragEvent) {

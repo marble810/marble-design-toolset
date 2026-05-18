@@ -1,20 +1,20 @@
-# Making Tools with PixiJS
+# 使用 PixiJS 编写 Tool
 
 本指南带你在 **Marble Design Toolset** 里从零搭建一个基于 **PixiJS** 的 2D 纹理生成工具。读完后你能：
 
 - 在 `LeftPanel` 中组织参数区
 - 用 `PreviewCanvas` 承载固定宽高的 Pixi 画布
 - 在 prop 变化时驱动 Pixi 重绘
-- 通过 `loadTechStack('pixi')` 拿到框架预热好的 Pixi 实例
+- 通过公共 SDK 中的 render host helper 拿到框架预热好的 Pixi 实例
 - 提供导出（截图为 PNG）能力
 
 ## TL;DR
 
-1. `bun run create:tool` → 选 `preview` starter + `pixi` tech stack。
-2. 在 master `.svelte` 里组合 `LeftPanel` + `<PreviewCanvas contentWidth={...} contentHeight={...}>`，把 Pixi 子组件挂在 `PreviewCanvas` 内。
-3. 在 Pixi 子组件 `onMount` 中 `await loadTechStack('pixi')`，创建 `PIXI.Application` 并把 `app.canvas` 挂进 host element。
+1. `bun run create:tool` → 优先选 `pixi-preview` recipe。
+2. 脚手架会声明 `techStack: ['pixi']`，并生成 `PreviewCanvas` + Pixi 子组件的最小 wiring。
+3. 在 Pixi 子组件里继续使用公共 SDK 的 `createRenderHostLifecycle()` 与 `createPixiApplicationHost()`。
 4. 用 `$effect` 监听 props，调用 renderer 的 resize / 自定义 update 函数同步参数。
-5. `onMount` 返回的 cleanup 函数里 `app.destroy(true, { children: true })`。
+5. cleanup、session active 与 exporter 注销优先挂到 render host lifecycle，不要手写第二套宿主生命周期。
 
 ## 适用场景
 
@@ -33,8 +33,7 @@ bun run create:tool
 交互提示时：
 
 - **Tool Name**: 输入工具名，例如 `Noise Generator`（自动转成 id `noise-generator`）。
-- **Starter Type**: 选 `preview`（我们要用 `PreviewCanvas`）。
-- **Tech Stacks**: 选 `pixi`（让框架预热共享 PixiJS 模块）。
+- **Capability Recipe**: 优先选 `pixi-preview`。如果你选择 `custom`，再手动选 `preview` starter 和 `pixi` tech stack。
 
 脚手架会在 `src/tools/noise-generator/` 下创建符合 schema 的 `metadata.json`、`index.ts`、唯一的 root-level master `.svelte`，以及 `components/` 私有目录。
 
@@ -53,7 +52,7 @@ src/tools/noise-generator/
 `index.ts` 必须显式声明所需的计算栈：
 ```typescript
 import metadata from './metadata.json';
-import type { ToolDefinition } from '$lib/types/tool';
+import type { ToolDefinition } from '$lib/tool-sdk/index.js';
 
 const definition = {
 	metadata,
@@ -76,6 +75,17 @@ export default definition;
 4. **生命周期**：使用 `createRenderHostLifecycle` 与 `createPixiApplicationHost` 管理初始化、session active、导出注册和销毁。
 
 ---
+
+### 统一 Host Lifecycle
+
+Pixi 工具推荐从公共 SDK 引入 `createRenderHostLifecycle()`。它是 render-host 版的统一 host lifecycle helper，会把以下宿主阶段串在一起：
+
+- `runInit(...)`：初始化 Pixi 应用、scene、纹理等宿主资源；成功后进入 ready，异常时写入 error。
+- `isSessionActive` / `onActiveChange(...)`：跟随 workspace tab 的 active / inactive 状态；切换标签不会重建会话。
+- `addCleanup(...)`：把 WebGL、Ticker、ResizeObserver、纹理等释放动作挂到同一条 cleanup 链。
+- `registerCanvasExporter(...)` / `registerRenderExporter(...)`：注册 exporter，并在 lifecycle cleanup 时自动注销，避免 Export UI 持有失效 canvas。
+
+helper 只编排宿主状态，不接管你的 Pixi scene、shader、filter、simulation 或绘制函数。非 Pixi / 非 render-host 场景若只需要同样的 init、active、cleanup 和 exporter 语义，可以直接使用 SDK 中的 `createToolHostLifecycle()`。
 
 ## 3. 编写主组件 (NoiseGenerator.svelte)
 
@@ -157,7 +167,7 @@ export default definition;
 在子组件中，利用 `loadTechStack` 获取 PixiJS。这样框架会在外层保证库被加载并缓存，内部直接拿来用即可。我们需要处理：创建应用、挂载节点、响应参数变化、销毁。
 
 推荐把类型写法固定成两层：
-- 模块类型从 `$lib/types/tech-stack` 的 `TechStackModule<'pixi'>` 派生。
+- 模块类型从 `$lib/tool-sdk/index.js` 的 `TechStackModule<'pixi'>` 派生。
 - 长期存活的实例用 `import type` 从 `pixi.js` 获取类型，不要把 `Application` 或自定义控制器声明成 `any`。
 
 ```svelte
@@ -166,7 +176,7 @@ export default definition;
 	import {
 		createPixiApplicationHost,
 		createRenderHostLifecycle
-	} from '$lib/runtime/render-host/index.js';
+	} from '$lib/tool-sdk/index.js';
 	import type { Application } from 'pixi.js';
 
 	type PixiApp = Application;

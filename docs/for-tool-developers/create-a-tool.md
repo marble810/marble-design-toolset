@@ -1,4 +1,4 @@
-# Tools - Getting Started
+# Tool 开发入门
 
 ## 开始之前
 
@@ -17,49 +17,60 @@
 
 | 文件 | 内容 |
 | --- | --- |
-| `src/lib/types/tool.ts` | `ToolDefinition`、`ToolMetadata` 等核心类型 |
-| `src/lib/runtime/tool-registry.ts` | catalog 发现与 definition 懒加载逻辑 |
-| `src/lib/runtime/tool-runtime-context.ts` | toolId、metadata、menu action、session active 与 tech stack 访问 |
-| `src/lib/runtime/tech-stack.ts` | heavy tech stack 加载器与缓存 |
-| `src/lib/runtime/io/` | tool-facing 文件来源 workflow、摘要与下载 primitive |
-| `src/lib/runtime/file-input/` | 统一文件输入控制器、drop helper 与标准化读取逻辑 |
-| `src/lib/components/tool-io/` | `SourceInputSection` 与 `DropZone` |
-| `src/lib/runtime/render-host/` | Canvas2D、Pixi、Three 的 session-aware lifecycle helper |
-| `src/lib/runtime/workspace-controller/` | workspace tabs、hash、localStorage 与左侧宽度控制器 |
-| `src/lib/components/shell/index.ts` | shell 组件统一导出 |
+| `src/lib/tool-sdk/index.ts` | 面向 tool 作者的公共 SDK：`ToolDefinition`、runtime context、source input、共享 IO UI、export context、render host 与 tech stack helper |
+| `src/lib/components/tool-io/` | `SourceInputSection` 与 `DropZone` 的实现入口；新代码通常直接使用 SDK re-export |
+| `src/lib/components/shell/index.ts` | tool 可组合的公开布局组件：`LeftPanel`、`RightPanel`、`Section`、`PreviewCanvas`、`FullStage` |
+| `src/lib/components/ui/index.ts` | tool 可复用的公开 UI primitive 与表单组件 |
+| `src/lib/runtime/**` | framework internal 实现细节；除兼容窗口内的历史路径外，新代码不应直接依赖 |
 | `src/tools/hello-world/` | 最简 tool 示例 |
 | `src/tools/aspect-ratio/` | 参数型 tool 示例 |
 | `src/tools/shallow-water-height/` | Three / render host / export 示例 |
 
 ## 推荐方式：先用脚手架
 
-当前仓库已经提供项目内脚手架命令：
+当前仓库已经提供项目内脚手架命令。新 tool 的最短上手路径是：先选最接近目标的 capability recipe，生成能跑的 wiring，再替换成自己的业务逻辑。
 
 ```bash
 bun run create:tool
 ```
 
-该命令会交互式收集三类核心信息：
+该命令会先收集：
 
 - `tool name`
-- `starter type`：`preview` 或 `stage`
-- `tech stacks`：`three`、`pixi`、`gsap` 的逗号分隔选择
+- `capability recipe`
+
+首批 recipe：
+
+| Recipe | 适用场景 | 生成内容 |
+| --- | --- | --- |
+| `preview-basic` | 固定尺寸预览、参数面板、纯 DOM / SVG / Canvas 起步 | `LeftPanel` + `RightPanel` + `PreviewCanvas` + 私有 preview 子组件 |
+| `source-preview` | 需要导入本地图像、影片或文字文件 | `createToolSourceInput()`、`SourceInputSection`、`DropZone` 和预览占位 |
+| `layout-template` | 平面版式模板、可变画布尺寸、多素材输入、字体和 DOM PNG 导出 | `createLayoutToolController()`、多 source slots、字体管线、`PreviewCanvas` DOM 预览和 framework export |
+| `pixi-preview` | PixiJS 2D 渲染、纹理、粒子或滤镜工具 | `techStack: ['pixi']`、`createRenderHostLifecycle()`、`createPixiApplicationHost()` |
+| `three-stage` | Three.js / WebGL 全出血舞台 | `techStack: ['three']`、`FullStage`、`createThreeRenderHost()` 和 active-aware animation loop |
+| `preview-export` | 需要导出预览图的固定尺寸工具 | `metadata.json` 的 `export` 声明、`createCanvas2DRenderHost()` 和 framework export registration |
+| `custom` | recipe 不贴合，想保留旧式空白 starter | 继续手动选择 `preview` / `stage` 和 `three`、`pixi`、`gsap` tech stack |
+
+recipe 是可选加速器，不是后续实现约束。生成后你可以自由重构私有子组件、参数模型和渲染逻辑；只要继续满足 tool schema 与 host boundary，framework 仍把它视为有效 tool。
 
 脚手架会自动完成这些事情：
 
 - 把输入名称规范化为 `tool-id`、显示名和 PascalCase master 组件名
 - 生成 `metadata.json`、`index.ts`、唯一的 root-level master `.svelte`
-- 在 `components/` 下生成一个 starter 对应的私有子组件
+- 在 `components/` 下生成一个 recipe 或 starter 对应的私有子组件
 - 默认写入 `enabled: true`
 - 只在 `index.ts` 中写入 `techStack`，不会污染 `metadata.json`
+- 对 `preview-export` 只声明 framework export 能力并注册 exporter，不生成自定义下载代码
+- 对 `source-preview` 复用 SDK re-export 的 source input 与 drop UI，不复制 picker / drop / error glue code
+- 对 `layout-template` 使用 layout controller 管理尺寸、source slots、字体和 DOM exporter，不引入 Three/Pixi/GSAP
 
 默认 metadata 如下：
 
-- `desc`: `<Starter> starter scaffold for the <Tool Name> tool.`
-- `tag`: `['starter', '<starter-type>']`
+- `desc`: recipe 或 starter 对应的英文描述
+- `tag`: `['starter', ...]`，recipe 路径会包含 `recipe` 与能力标签
 - `version`: `1.0.0`
 
-如果你需要完全手写或审查脚手架输出，继续阅读下面的手工目录与 contract 说明。
+如果 recipe 不匹配，选择 `custom` 即可回到基础 starter；如果你需要完全手写或审查脚手架输出，继续阅读下面的手工目录与 contract 说明。
 
 ## 快速上手
 
@@ -91,7 +102,7 @@ src/tools/frame-label/
 
 ```ts
 import metadata from './metadata.json';
-import type { ToolDefinition } from '$lib/types/tool';
+import type { ToolDefinition } from '$lib/tool-sdk/index.js';
 
 const definition = {
   metadata,
@@ -206,6 +217,39 @@ Tool 只负责两件事：
 
 这个边界不是建议，而是框架能正常工作的前提。tool 如果重写 shell 层、重新造一套 workspace 结构，得到的不是扩展，而是破坏。
 
+## Host–Tool Boundary 与公共 SDK
+
+当前仓库采用 trusted in-repo tool 模型：tool 与 framework 同仓构建，但仍必须通过稳定边界协作。这个边界的目标不是限制 tool 的内部架构，而是避免 tool 反向耦合到 host internals。
+
+### Host owns
+
+- tool discovery、catalog、definition 懒加载和错误兜底
+- workspace 顶层 shell、tabs、dialogs、settings 与 viewport guard
+- runtime capability 注入，例如 runtime context、export context、source input、render host 和 tech stack 加载
+- public API 的兼容、弃用和迁移策略
+
+### Tool owns
+
+- tool 内部状态模型、组件拆分和渲染实现
+- master `.svelte` 内的 `LeftPanel` 与 `RightPanel` 内容组合
+- 私有 `components/` 下的领域 UI、canvas/WebGL/SVG/DOM 渲染和业务逻辑
+
+### Public API 与 internal implementation
+
+新 tool 默认只从这些公开入口接入宿主能力：
+
+- `$lib/tool-sdk/index.js`：公共 SDK，包含 `ToolDefinition`、`getToolRuntimeContext()`、`createToolSourceInput()`、`SourceInputSection`、`DropZone`、`getCanvasExportContext()`、`createRenderHostLifecycle()`、tech stack helper 与相关类型。
+- `$lib/components/shell/index.js`：公开布局组件。tool 可以组合 `LeftPanel`、`RightPanel`、`Section`、`PreviewCanvas`、`FullStage`，但不能重新定义 workspace 顶层 shell。
+- `$lib/components/ui/index.js`：公开 UI primitive；`$lib/components/tool-io/index.js` 仍是共享 source UI 的实现入口，但新 tool 默认从 SDK re-export 导入。
+
+`$lib/runtime/workspace-controller/*`、`$lib/runtime/tool-registry*`、`$lib/runtime/tool-shell-context*`、`$lib/components/workspace/*` 等路径属于 framework internal。它们可以被 framework 重构，不构成 tool contract。历史 tool 在兼容窗口内仍可使用部分旧入口，但新文档、脚手架和示例不再推荐这些路径。
+
+如果确实需要下探 internal，请先通过 OpenSpec change 把缺口提升为新的 public SDK / capability。临时 escape hatch 必须在代码评审中说明原因、风险和迁移计划，不能把 internal 路径写进脚手架或通用指南。
+
+### 迁移与隔离演进
+
+Public API 发生调整时，framework 必须提供替代入口、兼容窗口和迁移说明；不能只通过移动 internal 文件隐式打破 tool。当前隔离层级是 **Level 0 / trusted in-repo tool**：以 public boundary 隔离为主，不引入 worker 或 iframe 沙箱。未来如果进入 Level 1/2，更强隔离也必须继续通过 capability allowlist 与 message bridge 访问 host，而不是开放 internal 模块。
+
 ## Tab 会话语义
 
 workspace 现在采用 keep-alive 的 tab session 模型：
@@ -216,10 +260,10 @@ workspace 现在采用 keep-alive 的 tab session 模型：
 
 这意味着一个重要区别：不要再把“切到别的 tab”当成卸载信号。`onMount` 返回的清理函数只会在工具真正销毁时执行，例如用户关闭 tab。
 
-如果你的 tool 有 Pixi、Three、ticker、定时器、观察器或持续计算，优先使用 `src/lib/runtime/render-host/`。它会读取 session active 状态，并提供自动 cleanup、RAF 暂停/恢复和 exporter 自动注销：
+如果你的 tool 有 Pixi、Three、ticker、定时器、观察器或持续计算，优先使用公共 SDK 中的 render host helper。它会读取 session active 状态，并提供自动 cleanup、RAF 暂停/恢复和 exporter 自动注销：
 
 ```ts
-import { createRenderHostLifecycle } from '$lib/runtime/render-host/index.js';
+import { createRenderHostLifecycle } from '$lib/tool-sdk/index.js';
 
 const renderHost = createRenderHostLifecycle();
 const isReady = $derived(renderHost.isReady);
@@ -237,7 +281,7 @@ renderHost.startAnimationLoop(() => {
 工具内部可以通过 runtime context 读取 framework 提供的稳定身份和服务：
 
 ```ts
-import { getToolRuntimeContext } from '$lib/runtime/tool-runtime-context';
+import { getToolRuntimeContext } from '$lib/tool-sdk/index.js';
 
 const runtime = getToolRuntimeContext();
 const toolId = $derived(runtime?.toolId ?? 'unknown-tool');
@@ -260,8 +304,11 @@ runtime context 包含：
 ```svelte
 <script lang="ts">
   import { onDestroy } from 'svelte';
-  import { SourceInputSection, DropZone } from '$lib/components/tool-io/index.js';
-  import { createToolSourceInput } from '$lib/runtime/io/index.js';
+  import {
+    createToolSourceInput,
+    DropZone,
+    SourceInputSection
+  } from '$lib/tool-sdk/index.js';
 
   const sourceInput = createToolSourceInput({ allowedKinds: ['image', 'video'] });
   const sourceItem = $derived(sourceInput.currentItem);
@@ -344,7 +391,7 @@ src/tools/<tool-id>/
 
 ```ts
 import metadata from './metadata.json';
-import type { ToolDefinition } from '$lib/types/tool';
+import type { ToolDefinition } from '$lib/tool-sdk/index.js';
 
 const definition = {
   metadata,
@@ -492,7 +539,7 @@ src/tools/frame-label/
 
 ```ts
 import metadata from './metadata.json';
-import type { ToolDefinition } from '$lib/types/tool';
+import type { ToolDefinition } from '$lib/tool-sdk/index.js';
 
 const definition = {
   metadata,
@@ -506,7 +553,7 @@ export default definition;
 
 ```ts
 import metadata from './metadata.json';
-import type { ToolDefinition } from '$lib/types/tool';
+import type { ToolDefinition } from '$lib/tool-sdk/index.js';
 
 const definition = {
   metadata,
@@ -697,7 +744,7 @@ const definition = {
 第二步，在组件内部通过 shared loader 获取：
 
 ```ts
-import { loadTechStack } from '$lib/runtime/tech-stack';
+import { loadTechStack } from '$lib/tool-sdk/index.js';
 
 const THREE = await loadTechStack('three');
 ```
@@ -706,7 +753,7 @@ loader 内部带缓存，因此顶层预加载和组件内调用都是安全的�
 
 ## 使用统一文件输入管道
 
-如果 tool 需要导入本地图像、影片或文字文件，默认入口是 `src/lib/runtime/file-input/`，不要在工具内部重复造一套文件选择、类型判定、文本读取、拖放解析和对象 URL 清理逻辑。
+如果 tool 需要导入本地图像、影片或文字文件，默认入口是 `$lib/tool-sdk/index.js` 中的 source workflow facade 与共享 IO UI，不要在工具内部重复造一套文件选择、类型判定、文本读取、拖放解析和对象 URL 清理逻辑。底层 `file-input` pipeline 仍作为 escape hatch 保留；只有当 `createToolSourceInput` 无法表达特殊流程时，才使用 SDK 暴露的 `createFileInputController`、`readFileInputItem`、`extractDroppedFiles` 等低层能力。
 
 统一管道的基本约束：
 
@@ -716,7 +763,7 @@ loader 内部带缓存，因此顶层预加载和组件内调用都是安全的�
 - 图像 / 影片对象 URL 的生命周期由 runtime 持有，tool 只消费 `currentItem`
 - 导入失败时保留最近一次成功结果，不要自己手动清空
 
-完整用法见 `docs/guides/Making Tools/tool-file-input-guide.md`。当工具涉及本地文件导入时，应先读那份指南再设计交互。
+完整用法见 `./file-input.md`。当工具涉及本地文件导入时，应先读那份指南再设计交互。
 
 ## Bits UI 约束
 
@@ -917,7 +964,7 @@ import * as THREE from 'three';
 - [ ] `loadComponent` 使用懒加载，而不是顶部 import
 - [ ] 若使用 `three`、`pixi` 或 `gsap`，已在 `index.ts` 声明 `techStack`
 - [ ] heavy dependency 通过 `loadTechStack` 获取，没有直接接进共享 shell
-- [ ] 若工具需要本地图像、影片或文字输入，已通过 `src/lib/runtime/file-input/` 接入而不是自写浏览器文件管道
+- [ ] 若工具需要本地图像、影片或文字输入，已通过 `$lib/tool-sdk/index.js` 的 source input / file input 能力接入而不是自写浏览器文件管道
 - [ ] master `.svelte` 没有重复写 workspace shell
 - [ ] `LeftPanel` 中没有重写 `MainInfo`
 - [ ] 右侧预览接入了 `PreviewCanvas`
