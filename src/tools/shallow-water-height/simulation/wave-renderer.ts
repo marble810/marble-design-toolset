@@ -9,7 +9,7 @@ import type {
 	WebGLRenderer,
 	WebGLRenderTarget
 } from 'three';
-import { type ShallowWaterParameters } from './shared.js';
+import { resolveDistortPhase, type ShallowWaterParameters } from './shared.js';
 
 type ThreeModule = typeof import('three');
 
@@ -32,15 +32,70 @@ const computeFragmentShader = /* glsl */ `
 	uniform float gridSize;
 	uniform float guardBand;
 	uniform float restThreshold;
+	uniform vec2 baseFlow;
+	uniform float distortStrength;
+	uniform float distortScale;
+	uniform float distortPhase;
+
+	float hash21(vec2 point) {
+		return fract(sin(dot(point, vec2(127.1, 311.7))) * 43758.5453123);
+	}
+
+	float valueNoise(vec2 point) {
+		vec2 cell = floor(point);
+		vec2 local = fract(point);
+		local = local * local * (3.0 - 2.0 * local);
+		return mix(
+			mix(hash21(cell), hash21(cell + vec2(1.0, 0.0)), local.x),
+			mix(hash21(cell + vec2(0.0, 1.0)), hash21(cell + vec2(1.0, 1.0)), local.x),
+			local.y
+		);
+	}
+
+	float distortNoise(vec2 point) {
+		vec2 drift = vec2(distortPhase, distortPhase * -0.73);
+		return valueNoise(point + drift) * 0.67
+			+ valueNoise(point * 2.03 - drift * 0.41) * 0.33;
+	}
+
+	vec2 curlNoise(vec2 point) {
+		const float epsilon = 0.08;
+		float dx = distortNoise(point + vec2(epsilon, 0.0))
+			- distortNoise(point - vec2(epsilon, 0.0));
+		float dy = distortNoise(point + vec2(0.0, epsilon))
+			- distortNoise(point - vec2(0.0, epsilon));
+		vec2 curl = vec2(dy, -dx) / (2.0 * epsilon);
+		return curl / max(1.0, length(curl));
+	}
+
+	vec2 clampSampleUv(vec2 uv) {
+		return clamp(uv, texelSize * 0.5, vec2(1.0) - texelSize * 0.5);
+	}
+
+	float sampleHeight(vec2 uv) {
+		return texture2D(stateTexture, clampSampleUv(uv)).r;
+	}
 
 	void main() {
-		vec4 state = texture2D(stateTexture, vUv);
+		vec2 flow = baseFlow;
+		if (distortStrength > 0.0) {
+			float visibleGridSize = max(1.0, gridSize - 2.0 * guardBand);
+			vec2 distortPoint = (vUv - 0.5) * (gridSize / visibleGridSize) * distortScale;
+			flow += curlNoise(distortPoint) * distortStrength;
+		}
+		float flowLength = length(flow);
+		if (flowLength > 1.5) {
+			flow *= 1.5 / flowLength;
+		}
+
+		vec2 sourceUv = clampSampleUv(vUv - flow * texelSize);
+		vec4 state = texture2D(stateTexture, sourceUv);
 		float height = state.r;
 		float previous = state.g;
-		float north = texture2D(stateTexture, vUv + vec2(0.0, texelSize.y)).r;
-		float south = texture2D(stateTexture, vUv - vec2(0.0, texelSize.y)).r;
-		float east = texture2D(stateTexture, vUv + vec2(texelSize.x, 0.0)).r;
-		float west = texture2D(stateTexture, vUv - vec2(texelSize.x, 0.0)).r;
+		float north = sampleHeight(sourceUv + vec2(0.0, texelSize.y));
+		float south = sampleHeight(sourceUv - vec2(0.0, texelSize.y));
+		float east = sampleHeight(sourceUv + vec2(texelSize.x, 0.0));
+		float west = sampleHeight(sourceUv - vec2(texelSize.x, 0.0));
 		float laplacian = north + south + east + west - 4.0 * height;
 		float nextHeight = 2.0 * height - previous + waveSpeed * laplacian;
 		nextHeight *= damping;
@@ -50,9 +105,17 @@ const computeFragmentShader = /* glsl */ `
 		float edgeFactor = spongeWidth <= 0.0 ? 1.0 : smoothstep(0.0, spongeWidth, edgeDistance);
 		nextHeight *= edgeFactor;
 		nextHeight = clamp(nextHeight, -4.0, 4.0);
-		nextHeight = abs(nextHeight) < restThreshold ? 0.0 : nextHeight;
+		float previousHeight = height * edgeFactor;
+		float restMotion = max(
+			max(abs(nextHeight), abs(previousHeight)),
+			abs(nextHeight - previousHeight)
+		);
+		if (restMotion < restThreshold) {
+			nextHeight = 0.0;
+			previousHeight = 0.0;
+		}
 
-		gl_FragColor = vec4(nextHeight, height * edgeFactor, state.b, state.a);
+		gl_FragColor = vec4(nextHeight, previousHeight, state.b, state.a);
 	}
 `;
 
@@ -105,6 +168,7 @@ export class ShallowWaterWaveRenderer {
 	private dataTexture: DataTexture | null = null;
 	private currentTexture: Texture | null = null;
 	private nextTargetIndex = 0;
+	private simulationStep = 0;
 
 	constructor(THREE: ThreeModule, canvas: HTMLCanvasElement, visibleSize: number) {
 		this.THREE = THREE;
@@ -146,7 +210,11 @@ export class ShallowWaterWaveRenderer {
 				edgeAbsorb: { value: 0.9 },
 				gridSize: { value: this.simSize },
 				guardBand: { value: this.guardBand },
-				restThreshold: { value: 0.0001 }
+				restThreshold: { value: 0.0001 },
+				baseFlow: { value: new THREE.Vector2(0, 0) },
+				distortStrength: { value: 0 },
+				distortScale: { value: 4 },
+				distortPhase: { value: 0 }
 			},
 			depthTest: false,
 			depthWrite: false
@@ -208,6 +276,7 @@ export class ShallowWaterWaveRenderer {
 		this.renderer.setViewport(0, 0, this.visibleSize, this.visibleSize);
 		this.currentTexture = seedTarget.texture;
 		this.nextTargetIndex = 1;
+		this.simulationStep = 0;
 	}
 
 	step(parameters: ShallowWaterParameters) {
@@ -218,6 +287,14 @@ export class ShallowWaterWaveRenderer {
 		this.computeMaterial.uniforms.damping.value = this.resolveStepDamping(parameters.damping);
 		this.computeMaterial.uniforms.edgeAbsorb.value = parameters.edgeAbsorb;
 		this.computeMaterial.uniforms.restThreshold.value = parameters.restThreshold;
+		this.computeMaterial.uniforms.baseFlow.value.set(parameters.flowX, parameters.flowY);
+		this.computeMaterial.uniforms.distortStrength.value = parameters.distortStrength;
+		this.computeMaterial.uniforms.distortScale.value = parameters.distortScale;
+		this.computeMaterial.uniforms.distortPhase.value = resolveDistortPhase(
+			this.simulationStep,
+			parameters.distortSpeed,
+			this.resolveResolutionScale()
+		);
 		this.quad.material = this.computeMaterial;
 
 		const target = this.targets[this.nextTargetIndex];
@@ -228,6 +305,7 @@ export class ShallowWaterWaveRenderer {
 		this.renderer.setViewport(0, 0, this.visibleSize, this.visibleSize);
 		this.currentTexture = target.texture;
 		this.nextTargetIndex = 1 - this.nextTargetIndex;
+		this.simulationStep += 1;
 	}
 
 	render(parameters: ShallowWaterParameters) {
@@ -261,8 +339,8 @@ export class ShallowWaterWaveRenderer {
 		return new this.THREE.WebGLRenderTarget(this.simSize, this.simSize, {
 			wrapS: this.THREE.ClampToEdgeWrapping,
 			wrapT: this.THREE.ClampToEdgeWrapping,
-			minFilter: this.THREE.NearestFilter,
-			magFilter: this.THREE.NearestFilter,
+			minFilter: this.THREE.LinearFilter,
+			magFilter: this.THREE.LinearFilter,
 			format: this.THREE.RGBAFormat,
 			type: this.THREE.HalfFloatType,
 			depthBuffer: false,

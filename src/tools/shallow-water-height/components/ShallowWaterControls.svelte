@@ -230,6 +230,46 @@
 			onchange={(value) => onParameterChange('waveSpeed', value)}
 		/>
 		<SliderField
+			label="Flow X"
+			min={-1}
+			max={1}
+			step={0.01}
+			value={parameters.flowX}
+			onchange={(value) => onParameterChange('flowX', value)}
+		/>
+		<SliderField
+			label="Flow Y"
+			min={-1}
+			max={1}
+			step={0.01}
+			value={parameters.flowY}
+			onchange={(value) => onParameterChange('flowY', value)}
+		/>
+		<SliderField
+			label="Distort Strength"
+			min={0}
+			max={1}
+			step={0.01}
+			value={parameters.distortStrength}
+			onchange={(value) => onParameterChange('distortStrength', value)}
+		/>
+		<SliderField
+			label="Distort Scale"
+			min={0.5}
+			max={12}
+			step={0.1}
+			value={parameters.distortScale}
+			onchange={(value) => onParameterChange('distortScale', value)}
+		/>
+		<SliderField
+			label="Distort Speed"
+			min={0}
+			max={0.05}
+			step={0.001}
+			value={parameters.distortSpeed}
+			onchange={(value) => onParameterChange('distortSpeed', value)}
+		/>
+		<SliderField
 			label="Damping"
 			min={0.9}
 			max={0.999}
