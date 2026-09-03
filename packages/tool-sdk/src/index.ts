@@ -19,6 +19,9 @@ export type { InspectorCallback } from './define-inspector-callback.ts';
 export { createInspectorContext, collectInspectorElements } from './context.ts';
 export type { CreateInspectorContextInput, InspectorContext } from './context.ts';
 
+export { EnvironmentClient } from './client.ts';
+export type { EnvironmentClientOptions, EnvironmentMessageHandler } from './client.ts';
+
 export type {
 	AssetHandle,
 	ButtonOptions,

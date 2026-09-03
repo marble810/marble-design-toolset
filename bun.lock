@@ -41,6 +41,13 @@
       "name": "tool-contract",
       "version": "0.0.0",
     },
+    "packages/tool-host": {
+      "name": "tool-host",
+      "version": "0.0.0",
+      "dependencies": {
+        "tool-contract": "workspace:*",
+      },
+    },
     "packages/tool-sdk": {
       "name": "tool-sdk",
       "version": "0.0.0",
@@ -389,6 +396,8 @@
     "tool-builder": ["tool-builder@workspace:packages/tool-builder"],
 
     "tool-contract": ["tool-contract@workspace:packages/tool-contract"],
+
+    "tool-host": ["tool-host@workspace:packages/tool-host"],
 
     "tool-sdk": ["tool-sdk@workspace:packages/tool-sdk"],
 

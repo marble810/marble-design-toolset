@@ -7,11 +7,11 @@
 
 ## 2. Host Session 与 Environment API（MAB-66）
 
-- [ ] 2.1 定义 Environment API discriminated unions、runtime schemas 与 test vectors。
-- [ ] 2.2 实现 Cataloged/HostReady/Booting/Ready/Failed/Closed lifecycle core。
-- [ ] 2.3 实现 Host-owned Parameter Store、Constraint、revision、coalescing 与 computed scheduling。
-- [ ] 2.4 实现 retained Standard Inspector renderer 与 Tool Command lifecycle。
-- [ ] 2.5 实现 staged Reload、Restart、Reset 与单 replacement invariant。
+- [x] 2.1 定义 Environment API discriminated unions、runtime schemas 与 test vectors。
+- [x] 2.2 实现 Cataloged/HostReady/Booting/Ready/Failed/Closed lifecycle core。
+- [x] 2.3 实现 Host-owned Parameter Store、Constraint、revision、coalescing 与 computed scheduling。
+- [x] 2.4 实现 retained Standard Inspector renderer 与 Tool Command lifecycle（headless view-model renderer core + default tree；DOM 渲染绑定随 Web/Desktop adapters）。
+- [x] 2.5 实现 staged Reload、Restart、Reset 与单 replacement invariant。
 
 ## 3. Web adapter（MAB-69）
 

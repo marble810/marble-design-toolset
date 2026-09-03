@@ -30,6 +30,55 @@ export { validateInspectorTree } from './inspector.ts';
 export type { Diagnostic, Result } from './diagnostics.ts';
 export { error, fail, ok } from './diagnostics.ts';
 
+import type { Diagnostic } from './diagnostics.ts';
+import type { ParameterValue } from './environment.ts';
+
+// Re-export the Environment API contract (types + runtime schemas + transport seam).
+export {
+	ENVIRONMENT_PROTOCOL_VERSION,
+	ENVIRONMENT_MESSAGE_NAMES,
+	createEnvironmentEnvelope,
+	validateEnvironmentEnvelope,
+	validateEnvironmentPayload
+} from './environment.ts';
+export type {
+	AssetChangedPayload,
+	AssetContent,
+	AssetRequestPayload,
+	AssetResponsePayload,
+	AssetSnapshot,
+	BootPayload,
+	BootSurface,
+	CommandCancelPayload,
+	CommandExecutePayload,
+	CommandResultPayload,
+	DiagnosticEmitPayload,
+	EnvironmentEndpointRole,
+	EnvironmentEnvelope,
+	EnvironmentInventory,
+	EnvironmentMessageKind,
+	EnvironmentMessageName,
+	EnvironmentMessagePayload,
+	EnvironmentProtocolVersion,
+	ExportExecutePayload,
+	ExportResultPayload,
+	ParameterChangedPayload,
+	ParameterComputeRequestPayload,
+	ParameterComputeResponsePayload,
+	ParameterSetRequestPayload,
+	ParameterSetResponsePayload,
+	ParameterSnapshot,
+	ParameterSnapshotRequestPayload,
+	ParameterSnapshotResponsePayload,
+	SurfaceDisposePayload,
+	SurfaceKind,
+	SurfaceReadyPayload,
+	SurfaceResizePayload
+} from './environment.ts';
+export { createInMemoryTransportPair, recordTransport } from './environment-transport.ts';
+export type { EnvironmentTransport, InMemoryTransportPair, Unsubscribe } from './environment-transport.ts';
+export type { ParameterValue } from './environment.ts';
+
 export { assertSerializable, collectSerializationDiagnostics } from './serializable.ts';
 
 export { validateCatalogEntry, validateCatalogSourceRef } from './validate.ts';

@@ -20,6 +20,8 @@
 		"packages/tool-sdk/src/**/*.ts",
 		"packages/tool-sdk/type-tests/**/*.ts",
 		"packages/tool-builder/src/**/*.ts",
-		"packages/tool-builder/type-tests/**/*.ts"
+		"packages/tool-builder/type-tests/**/*.ts",
+		"packages/tool-host/src/**/*.ts",
+		"packages/tool-host/type-tests/**/*.ts"
 	]
 }
