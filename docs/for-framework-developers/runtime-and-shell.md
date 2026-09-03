@@ -1,130 +1,124 @@
-# Runtime 与 Shell 架构
+# Runtime 与 Workspace architecture
 
-## 概览
+> 本文描述 Catalog-driven 目标 architecture。迁移前实现中的 `tool-registry.ts`、同 realm Svelte contexts 与 Tool-owned panels 不是目标 interface。
 
-Marble Design Toolset 的 runtime 层分为两个部分：
+## Workspace
 
-- **Shell**：Workspace 级别的布局与路由（`src/lib/components/shell/`、`src/routes/`）
-- **Runtime**：框架级 capability 实现（`src/lib/runtime/`）
+Deshelf Host 拥有顶层 Workspace：
 
-Tool 只通过 public SDK 访问 runtime 能力；shell 组件则同时被 framework 和 tool 使用（布局组件为 public）。
-
-## Shell 结构
-
-```
-src/lib/components/shell/
-├── index.ts                    ← public export（LeftPanel、RightPanel、Section 等）
-├── layout/
-│   ├── LeftPanel.svelte
-│   ├── RightPanel.svelte
-│   ├── Section.svelte
-│   ├── PreviewCanvas.svelte
-│   └── FullStage.svelte
-├── workspace/
-│   ├── WorkspaceShell.svelte   ← 顶层 workspace，管理 tool 路由
-│   └── ToolShell.svelte        ← 单个 tool 的宿主容器
-└── tool-session/
-    └── ToolSession.svelte      ← internal — session active / lifecycle 协调
+```text
+Workspace
+├─ MainInfo / Tool Info
+├─ Standard Inspector
+├─ Tool Slate slot（可选）
+└─ Canvas slot
 ```
 
-**布局规则：**
-- Workspace shell 拥有顶层布局。
-- Tool 只能渲染自己的 `LeftPanel` 和 `RightPanel`/`FullStage`/`PreviewCanvas` 内容。
-- Tool **不能**重新定义 workspace shell 的顶层布局。
+Visual Tool 不渲染 LeftPanel/RightPanel，也不重新定义 Workspace shell。Host 根据 Catalog Entry 的 Inspector Tree 创建 Standard Controls；Tool 只在 Main/Slate Containers 中渲染 Canvas 与 Tool Slate。
 
-## Tool 加载
+## Catalog-driven loading
 
-Tool 通过懒加载 Svelte 组件的方式被 framework 加载：
-
-```
-src/lib/runtime/tool-registry/
-```
-
-每个 tool 的 `index.ts` 导出一个 `ToolDefinition`，包含：
-- `metadata`：来自 `metadata.json` 的静态信息
-- `techStack`（可选）：声明需要的 heavy tech stack
-- `loadComponent`：懒加载 master `.svelte` 的动态 import
-
-Framework 在渲染时：
-1. 解析 `techStack` 声明，通过 shared runtime 加载对应依赖（Three.js / Pixi.js / GSAP）
-2. 调用 `loadComponent()` 懒加载 tool 组件
-3. 把 tool 组件渲染到 `ToolShell` 提供的容器中
-
-## Runtime 能力模块
-
-```
-src/lib/runtime/
-├── file-input/          ← 底层文件选择、拖放、读取、对象 URL 管理
-├── io/                  ← tool-facing IO facade（createToolSourceInput 的实现层）
-├── canvas-export/       ← export context、exporter registry、PNG/视频编码
-├── render-host/         ← host lifecycle、Pixi/Three/Canvas2D render host
-├── tech-stack/          ← tech stack 加载与 capability 声明
-├── tool-registry/       ← tool 发现与注册
-└── tool-session-context.ts  ← session active 状态的 Svelte context key
+```text
+Tool Source Adapter
+  → Catalog Entry
+  → Host 创建 Parameter Store + Standard Inspector
+  → Main Container boot
+  → Canvas surface.ready
+  → Tool Session Ready
+  → 可选 Slate Container boot
 ```
 
-这些模块是 **internal**，framework 可以随时重构。Tool 通过 `$lib/tool-sdk/index.js` 访问对应能力的 public wrapper。
+Web Tool Source 在应用构建期生成静态 Catalog。Desktop Tool Source 在 Open Project 构建成功后更新 Project Catalog。两者满足相同 Catalog interface。
 
-## IO Pipeline
+## Tool Session lifecycle
 
-```
-src/lib/runtime/file-input/     ← primitive（picker、drop listener、file reader、URL 清理）
-     ↓ wraps
-src/lib/runtime/io/             ← tool-facing facade（createToolSourceInput）
-     ↓ re-exports via
-src/lib/tool-sdk/index.ts       ← public surface
+```text
+Cataloged → HostReady → Booting → Ready
+                         Booting → Failed
+Ready | Failed → Closed
 ```
 
-底层 file-input primitive 负责：
-- `createFileInputController`：文件选择 controller
-- `extractDroppedFiles`：拖放事件解析
-- `readFileInputItem`：文件读取（ArrayBuffer、DataURL、text）
-- 对象 URL 的创建和清理
+- **Cataloged**：Manifest、编译与 extraction 成功。
+- **HostReady**：Parameter Store 与 Standard Inspector 已建立。
+- **Booting**：Main Container 已收到 boot。
+- **Ready**：Canvas 已发出 `surface.ready`。
+- **Failed**：加载、版本、Entry error 或 startup timeout。
 
-IO facade（`src/lib/runtime/io/`）在此基础上：
-- 统一 picker、drop、drag-over 状态
-- 统一错误和 busy 状态
-- 统一对象 URL 生命周期
+`Unresponsive` 是 Ready Session 的 health。Tool Command timeout 后 callback 仍不结束时，Host chrome 提供 Restart Tool。
 
-Tool 不应直接操作 file-input primitive，优先使用 `createToolSourceInput`。只有 facade 无法表达的特殊流程才使用 public SDK 暴露的 escape hatch。
+## Tool Containers
 
-## Export Runtime
-
-```
-src/lib/runtime/canvas-export/
-├── context.ts     ← ExportContext Svelte context（ToolShell setContext / tool getContext）
-├── index.ts       ← public re-export（via tool-sdk）
-└── canvas-export.test.ts
-```
-
-Export 流程：
-1. `ToolShell` 在渲染时 `setContext(CANVAS_EXPORT_KEY, { exporters, register })`
-2. Tool 的 preview 子组件在 `onMount` / 生命周期中调用 `getCanvasExportContext().register(descriptor)` 注册 exporter
-3. Framework 的 Export Section（LeftPanel 底部）读取注册的 exporters，驱动编码和下载
-
-## Host Lifecycle
-
-```
-src/lib/runtime/render-host/
-├── lifecycle-core.ts           ← 纯逻辑（testable，不依赖 Svelte）
-├── lifecycle.svelte.ts         ← Svelte 响应式 lifecycle wrapper
-├── host-lifecycle.svelte.ts    ← createToolHostLifecycle（统一 init/active/cleanup/export）
-├── index.ts                    ← Pixi/Three/Canvas2D render host helpers
-└── lifecycle-core.test.ts
+```text
+Tool Session
+├─ Main Container（必需）
+│  ├─ Tool Entry runtime definition
+│  ├─ Parameter compute callbacks
+│  ├─ Tool Command/private callbacks
+│  ├─ simulation
+│  └─ Canvas
+└─ Slate Container（可选）
+   └─ Tool Slate DOM/Svelte/CSS/local state
 ```
 
-Host lifecycle 协调：
-- `runInit(cb)`：异步初始化（WebGL context、Pixi Application、Three renderer）
-- `isSessionActive`：workspace tab active/inactive 状态
-- `startAnimationLoop(cb)`：只在 active 时运行帧回调，inactive 时自动暂停
-- `addCleanup(cb)`：组件销毁时统一清理
-- `registerCanvasExporter(...)`：lifecycle-aware 的 exporter 注册（组件销毁时自动注销）
+Slate Ready 不阻塞 Canvas 首帧；Slate failure 只产生 Surface diagnostic。v1 不提供 Canvas ↔ Slate 私有 bus，两者通过 Host Parameter Store 与 Tool Commands 协作。
 
-## 添加新 Runtime Capability
+## Environment API
 
-1. 在 `src/lib/runtime/<capability>/` 下创建 capability 目录。
-2. 把纯逻辑拆进 `<capability>-core.ts`（testable，不依赖 Svelte）。
-3. 用 `<capability>.svelte.ts` 包裹 Svelte 响应式层（若需要）。
-4. 写 `<capability>.test.ts`，覆盖核心逻辑。
-5. 在 `src/lib/tool-sdk/index.ts` 决定暴露哪些 public wrapper。
-6. 在 `docs/for-tool-developers/` 补充 tool 使用文档。
+Environment API 是低频管理 interface：
+
+```text
+parameter.snapshot | changed | set | compute
+command.execute | cancel | result | status
+surface.resize | dispose
+asset.* | export.*
+diagnostic.emit
+```
+
+Web/Desktop 共享 types/schema，只替换 transport adapter：
+
+```text
+EnvironmentTransport
+├─ WebIframeAdapter
+└─ DesktopMessagePortAdapter
+```
+
+Endpoint role 由 transport channel 确定。Restart/Reload 创建新 sessionId；旧 Session 消息丢弃。没有 hello/welcome、runtime registration、Grant、endpointId 或 per-message sequence。
+
+## Parameter flow
+
+Standard Inspector 的 pointer events 不进入 Environment API：
+
+```text
+pointer input
+  → Host local display
+  → rAF / pointerup coalescing
+  → parameter.set(expectedRevision)
+  → Store validation
+  → parameter.changed to Main
+```
+
+Host 是 Parameter Store 唯一权威。computed 由 Host 调度，Main 运行短函数；compute callback 不访问 GPU/IO。
+
+## IO 与 Export
+
+现有 file-input、canvas-export 与 render lifecycle implementation 可以保留并深埋到 `tool-host`，但 Tool 不再通过同 realm Svelte context 注册。
+
+- Environment Inventory 决定当前 Asset/Export adapters 是否存在。
+- Web adapter 可以交付 blob 或用户选择结果。
+- Desktop adapter 不向 Tool 暴露真实文件路径。
+- Visual Output encoding、picker、drop parsing 与对象 URL cleanup 由 Host implementation 统一处理。
+
+## Reload
+
+Reload 先构建新的 Catalog Entry，再创建一套 replacement：
+
+```text
+new descriptor
+  → staged Parameter/Asset migration
+  → boot replacement with staged snapshot
+  → replacement Canvas Ready
+  → atomic commit + switch
+  → dispose old Container
+```
+
+失败时释放 staged resources 并保留旧 Session。同时最多存在一套 replacement，避免并发 build 完成顺序覆盖更新。

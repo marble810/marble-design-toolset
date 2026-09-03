@@ -1,65 +1,49 @@
-# 框架开发者指南
+# Deshelf 框架开发者指南
 
 ## 适用对象
 
-本节文档面向维护 Marble Design Toolset 框架本身的开发者。这包括：workspace shell、runtime 能力实现、public SDK surface、脚手架与 recipes、docs browser、以及 host-tool boundary 演进。
+本节面向维护 Deshelf Forge、Deshelf Host、Catalog、Tool Builder、Workspace 与 Web/Desktop adapters 的开发者。Tool 作者请阅读 [Tool developer 文档](../for-tool-developers/overview.md)。
 
-如果你只是在开发一个新 tool，请阅读 [tool developer 文档](../for-tool-developers/overview.md)。
+> 当前仓库正从旧的同 realm Svelte Tool 架构迁移到 Catalog-driven Tool Containers。目标设计以 [`../architecture/deshelf-architecture.md`](../architecture/deshelf-architecture.md) 与 Linear MAB-65 为准；既有 OpenSpec/specs 描述尚未迁移的 implementation。
 
-## 关键原则
+## 核心原则
 
-Framework 只负责：
-- Tool 发现、加载和路由
-- Workspace shell 与布局
-- 公共 runtime 能力（IO、export、lifecycle）的实现
-- Host-tool boundary 的定义和执行
-- Public SDK 的维护与兼容性
-
-Framework **不管理**：
-- Tool 的内部状态设计
-- Tool 的内部组件拆分和渲染细节
-- Tool 的代码风格和抽象层次
+- Forge 在构建期从 Tool Manifest 与 Tool Entry 生成 Catalog Entry。
+- Host 仅凭 Catalog 建立 Parameter Store 与 Standard Inspector。
+- Tool Session 不进行 runtime Registration。
+- Main Container 运行 simulation 与 Canvas；可选 Slate Container 运行 Tool Slate。
+- Environment API 是低频管理 seam，不承载 rAF、GPU、simulation state 或 Canvas pixels。
+- Web/Desktop 共用 interfaces，只替换 Tool Source 与 transport adapters。
+- Tool Container 提供环境隔离，不承诺防恶意代码或进程级故障隔离。
 
 ## 文档索引
 
 | 文档 | 内容 |
 |---|---|
-| [host-tool-boundary.md](./host-tool-boundary.md) | Host-tool boundary charter：职责边界、public/internal 分层、contract validation |
-| [public-sdk.md](./public-sdk.md) | 维护 public SDK surface：现有 exports、如何添加新 API、兼容性策略 |
-| [runtime-and-shell.md](./runtime-and-shell.md) | Runtime 架构：tool registry、shell 结构、capability 协议 |
-| [scaffolding-and-recipes.md](./scaffolding-and-recipes.md) | 脚手架系统：如何添加 recipe、模板约定、scaffold 测试 |
-| [docs-system.md](./docs-system.md) | Docs catalog 和 browser：如何维护文档目录、audience 结构约定 |
+| [Deshelf 目标架构](../architecture/deshelf-architecture.md) | Catalog、Tool Containers、Environment API 与 migration 总设计 |
+| [现有代码迁移分析](../architecture/current-code-migration-analysis.md) | 当前 modules 的保留、替换、删除与 implementation 顺序 |
+| [Host 与 Tool 的 seam](./host-tool-boundary.md) | Forge/Host/Tool ownership 与 validation 时机 |
+| [Tool SDK interface](./public-sdk.md) | `defineVisualTool`、Inspector descriptor 与 Environment client |
+| [Runtime 与 Workspace](./runtime-and-shell.md) | Session lifecycle、Parameter flow、Reload 与 adapters |
+| [Scaffolding and recipes](./scaffolding-and-recipes.md) | Tool Project 脚手架与模板维护 |
+| [Docs system](./docs-system.md) | 文档 catalog、browser 与 audience 规则 |
 
-## 开发命令
+## 目标 modules
 
-```bash
-npm run dev          # 开发服务器
-npm run build        # 生产构建（运行 validate.mjs + vite build）
-npm run test         # 全量测试（Node test runner）
-bun run create:tool  # 交互式 tool 脚手架
-
-# 手动运行 tool contract validation
-node scripts/tool-contract/validate.mjs
-```
-
-## 核心目录
-
-| 目录 | 职责 |
+| Module | 职责 |
 |---|---|
-| `src/lib/tool-sdk/` | Public tool SDK — tool 作者的唯一稳定入口 |
-| `src/lib/runtime/` | Framework internal runtime（IO、export、lifecycle、file-input、render-host 等） |
-| `src/lib/components/shell/` | Workspace shell 布局组件（ToolShell、LeftPanel、RightPanel 等） |
-| `src/lib/components/ui/` | Shared UI primitive 组件（Button、SliderField、PixelIcon 等） |
-| `scripts/tool-contract/` | Tool schema 和 boundary import 的 contract validation |
-| `scripts/tool-scaffold/` | 脚手架模板与 recipe 逻辑 |
-| `src/routes/docs/` | Docs browser SvelteKit 路由 |
-| `src/lib/docs/` | Docs catalog 构建与 Markdown 加载逻辑 |
+| `packages/tool-contract/` | Manifest、Catalog descriptor、Environment API types/schema |
+| `packages/tool-sdk/` | Tool author interface 与 Container client |
+| `packages/tool-host/` | Catalog consumption、Session、Store、Inspector、adapter interface |
+| `packages/tool-builder/` | 扫描、编译、extraction、Catalog generation |
+| `apps/web/` | 静态 Catalog 与 iframe adapter |
+| `apps/desktop/` | Open Project、Project Catalog 与 WebContents adapter |
+| `tools/shallow-water/` | 第一份迁移样本 |
 
-## 添加新框架能力的流程
+## Change 流程
 
-1. 先在 `openspec/changes/` 创建一个新 change（`openspec new change "<name>"`），写清楚 proposal/design/specs。
-2. 在 `src/lib/runtime/` 内实现能力，保持 internal 路径不对外承诺稳定。
-3. 在 `src/lib/tool-sdk/index.ts` 决定是否暴露 public surface——只暴露 tool 真正需要的部分。
-4. 更新脚手架模板（`scripts/tool-scaffold/templates/index.js`）使其优先使用新的 public API。
-5. 更新 `docs/for-tool-developers/` 中对应的使用文档。
-6. 运行 `npm run test` 和 `npm run build` 验证。
+1. 在 Linear 的 MAB-65 子 Issue 明确 scope 与 acceptance。
+2. 为跨既有 OpenSpec contract 的变更创建中文 OpenSpec change。
+3. 先实现共享 interface 与 conformance tests，再实现 Web/Desktop adapters。
+4. 使用 Shallow Water 验证完整路径。
+5. 运行 repository tests、contract validation 与 production build。

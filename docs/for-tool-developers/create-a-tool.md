@@ -1,5 +1,7 @@
 # Tool 开发入门
 
+> **迁移期说明：**本文描述当前尚未迁移的 `metadata.json`、master Svelte 与 `tool-registry.ts` implementation，仅供维护旧代码。新 Tool Project 不应继续采用这套 schema；目标 contract 见 [`../architecture/deshelf-architecture.md`](../architecture/deshelf-architecture.md)，新作者指南将在 MAB-70 完成后替换本文。
+
 ## 开始之前
 
 这份指南告诉你如何在当前 Marble Design Toolset（mdt.）中从零创建一个 tool，让它自动出现在 workspace 的 Open Tool 列表里，并与现有的 shell、路由和 tech stack 加载机制无缝衔接。
