@@ -162,6 +162,10 @@ export class ControlledBuildExecutor implements DesktopBuildExecutor {
 				timedOut = true;
 				child.kill();
 			}, this.timeoutMs);
+			const cleanup = async (): Promise<void> => {
+				await fs.rm(payloadFile, { force: true });
+				await fs.rm(payload.resultFile, { force: true });
+			};
 			child.on('error', (err) => {
 				clearTimeout(timer);
 				resolve({
@@ -172,6 +176,7 @@ export class ControlledBuildExecutor implements DesktopBuildExecutor {
 			child.on('close', async () => {
 				clearTimeout(timer);
 				if (timedOut) {
+					await cleanup();
 					resolve({
 						ok: false,
 						diagnostics: [{ severity: 'error', code: 'desktop/build-timeout', message: `build exceeded ${this.timeoutMs}ms and was terminated` }]
@@ -187,8 +192,7 @@ export class ControlledBuildExecutor implements DesktopBuildExecutor {
 						diagnostics: [{ severity: 'error', code: 'desktop/build-result', message: `build process produced no result: ${err instanceof Error ? err.message : String(err)}` }]
 					});
 				} finally {
-					await fs.rm(payloadFile, { force: true });
-					await fs.rm(payload.resultFile, { force: true });
+					await cleanup();
 				}
 			});
 		});

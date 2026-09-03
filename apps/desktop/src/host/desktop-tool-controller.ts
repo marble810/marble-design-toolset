@@ -86,6 +86,7 @@ export class DesktopToolController {
 	private readonly createResizeObserver: NonNullable<DesktopToolControllerOptions['createResizeObserver']>;
 	private readonly detachResize: Array<() => void> = [];
 	private readonly onStateChange?: (state: ToolSessionState) => void;
+	private readonly onDiagnostic?: (diagnostic: Diagnostic) => void;
 	private readonly pendingPorts = new Map<string, { endpoint: 'main' | 'slate'; port: MessagePort }>();
 	private readonly unsubscribeHandoff: () => void;
 	private sessionId: string | undefined;
@@ -100,6 +101,7 @@ export class DesktopToolController {
 		this.slateHost = options.slateHost;
 		this.documentRef = options.documentRef ?? document;
 		this.onStateChange = options.onStateChange;
+		this.onDiagnostic = options.onDiagnostic;
 		this.createResizeObserver =
 			options.createResizeObserver ??
 			((target, onResize) => {
@@ -116,9 +118,6 @@ export class DesktopToolController {
 		this.session = new ToolSession({
 			entry: options.entry,
 			runtimeConfig: options.runtimeConfig,
-			// Asset adapter: the container asks; we answer with a cache-protocol URL that
-			// resolves bytes held in Main. The container never sees a filesystem path.
-			assetResolver: (assetId) => this.resolveAssetContent(assetId),
 			sessionId: undefined,
 			onStateChange: (state) => {
 				// The Slate realm boots only after the Main Canvas is Ready — never before,
@@ -131,12 +130,18 @@ export class DesktopToolController {
 		});
 	}
 
-	/** Opens the Main realm in Main and boots the Session. */
+	/** Opens the Main realm in Main and boots the Session. Failure releases the realm. */
 	async open(): Promise<void> {
 		if (this.closed) throw new Error('desktop-tool-controller: controller is closed');
 		if (this.sessionId !== undefined) throw new Error('desktop-tool-controller: session already open');
 		const opened = await this.bridge.openToolSession({ catalogEntryId: this.entry.catalogEntryId, endpoint: 'main' });
-		await this.adoptSession(opened, { mode: 'boot' });
+		try {
+			await this.adoptSession(opened, { mode: 'boot' });
+		} catch (err) {
+			// Failed adoption must not leak the already-created Main realm in Main.
+			await this.bridge.closeToolSession({ sessionId: opened.sessionId }).catch(() => {});
+			throw err;
+		}
 	}
 
 	/**
@@ -149,7 +154,13 @@ export class DesktopToolController {
 		if (this.sessionId === undefined) throw new Error('desktop-tool-controller: session not open');
 		const previousSessionId = this.sessionId;
 		const opened = await this.bridge.openToolSession({ catalogEntryId: this.entry.catalogEntryId, endpoint: 'main' });
-		await this.adoptSession(opened, { mode: 'restart' });
+		try {
+			await this.adoptSession(opened, { mode: 'restart' });
+		} catch (err) {
+			// Failed adoption must not leak the replacement realm.
+			await this.bridge.closeToolSession({ sessionId: opened.sessionId }).catch(() => {});
+			throw err;
+		}
 		this.slateBooted = false;
 		// Destroy the old realms in Main; the session already sent surface.dispose.
 		await this.bridge.closeToolSession({ sessionId: previousSessionId });
@@ -187,12 +198,15 @@ export class DesktopToolController {
 	/** Visual Output export: render in container, save dialog + disk write in Main. */
 	async exportOutput(outputId: string): Promise<DesktopToolExportResult> {
 		const sessionId = this.sessionId;
+		if (sessionId === undefined) {
+			return { ok: false, error: { severity: 'error', code: 'export/no-session', message: 'session is not open' } };
+		}
 		try {
 			const result = await this.session.executeExport(outputId);
 			if (!result.ok) return { ok: false, error: result.error };
 			const output = this.entry.outputs[outputId];
 			const saved = await this.bridge.exportSave({
-				sessionId: sessionId ?? '',
+				sessionId,
 				outputId,
 				suggestedName: `${this.entry.slug}-${outputId}`,
 				mime: output?.mime ?? 'application/octet-stream',
@@ -259,28 +273,32 @@ export class DesktopToolController {
 		});
 	}
 
-	private async resolveAssetContent(assetId: string): Promise<AssetContent | null> {
-		// The session keeps its own asset state; container `asset.request` replays the
-		// last `session.setAsset` content. Content the Host chrome picked arrives here
-		// through the same path, so nothing extra to resolve.
-		void assetId;
-		return null;
-	}
-
 	private async bootSlateIfPlanned(): Promise<void> {
 		if (this.closed || this.slateBooted) return;
 		if (this.slateHost === undefined || !this.entry.surfaces.slate) return;
 		if (this.sessionId === undefined) return;
-		this.slateBooted = true;
-		const opened = await this.bridge.openToolSession({
-			catalogEntryId: this.entry.catalogEntryId,
-			sessionId: this.sessionId,
-			endpoint: 'slate'
-		});
-		const port = await this.waitForPort(opened.sessionId, 'slate');
-		const surface = this.measure(this.slateHost);
-		this.observeSurface(this.slateHost, 'slate');
-		this.session.bootSlate({ transport: createPortTransport(port as unknown as PortLike), surface: { kind: 'slate', ...surface } });
+		try {
+			this.slateBooted = true;
+			const opened = await this.bridge.openToolSession({
+				catalogEntryId: this.entry.catalogEntryId,
+				sessionId: this.sessionId,
+				endpoint: 'slate'
+			});
+			try {
+				const port = await this.waitForPort(opened.sessionId, 'slate');
+				const surface = this.measure(this.slateHost);
+				this.observeSurface(this.slateHost, 'slate');
+				this.session.bootSlate({ transport: createPortTransport(port as unknown as PortLike), surface: { kind: 'slate', ...surface } });
+			} catch (err) {
+				// A failed Slate boot must not leak the Slate realm.
+				await this.bridge.closeToolSession({ sessionId: opened.sessionId }).catch(() => {});
+				this.slateBooted = false;
+				throw err;
+			}
+		} catch (err) {
+			// Slate failures never block the Canvas Ready path (architecture §6).
+			this.onDiagnostic?.({ severity: 'warning', code: 'slate/boot-deferred', message: err instanceof Error ? err.message : String(err) });
+		}
 	}
 
 	private observeSurface(element: HTMLElement, role: 'main' | 'slate'): void {

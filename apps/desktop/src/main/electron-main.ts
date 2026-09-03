@@ -21,7 +21,7 @@ import { ToolRealmManager, type ContainerWebContents } from './realms.ts';
 import type { AssetFileDialog } from './asset-store.ts';
 import type { SaveFileDialog } from './export-writer.ts';
 import { privilegedCacheScheme, resolveCacheUrl } from './resource-protocol.ts';
-import { InProcessBuildExecutor } from './controlled-build.ts';
+import { InProcessBuildExecutor, ControlledBuildExecutor } from './controlled-build.ts';
 import { BRIDGE } from '../shared/bridge-protocol.ts';
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -35,8 +35,14 @@ const CACHE_ROOT = path.join(app.getPath('userData'), 'deshelf-forge');
 const paths = createCachePaths(CACHE_ROOT);
 
 const catalog = new DesktopCatalogService(CACHE_ROOT);
+// Deployed apps build in the controlled subprocess (hard timeout + kill); the in-process
+// executor is a development-mode convenience because `ELECTRON_RUN_AS_NODE` cannot run
+// the TS runner (packaging ships it as compiled JS).
+const buildExecutor = app.isPackaged
+	? new ControlledBuildExecutor({ runnerPath: path.join(dirname, 'controlled-build-runner.js') })
+	: new InProcessBuildExecutor();
 const builder = new DesktopBuilderService(CACHE_ROOT, {
-	executor: new InProcessBuildExecutor(),
+	executor: buildExecutor,
 	resolveForgeProfile: createDevForgeProfileResolver(),
 	bootstrapEntry: BOOTSTRAP_ENTRY,
 	catalog,
@@ -67,9 +73,9 @@ const bridge = createDesktopBridge({
 	realms,
 	hostPortTarget: {
 		postMessage: (channel, message, transfer) => {
-			// The Host UI window is the single port-handoff target.
-			const window = BrowserWindow.getAllWindows()[0];
-			window?.webContents.postMessage(channel, message, transfer as MessagePortMain[]);
+			// The Host UI window is the single port-handoff target (tracked explicitly, not
+			// via getAllWindows()[0], so additional windows cannot hijack the handoff).
+			hostWindow?.webContents.postMessage(channel, message, transfer as MessagePortMain[]);
 		}
 	}
 });
@@ -79,6 +85,8 @@ for (const [method, handler] of Object.entries(bridge)) {
 	if (channel === undefined) continue;
 	ipcMain.handle(channel, (_event, request: unknown) => (handler as (request: unknown) => unknown)(request));
 }
+
+let hostWindow: BrowserWindow | undefined;
 
 function createHostWindow(): BrowserWindow {
 	const window = new BrowserWindow({
@@ -95,6 +103,10 @@ function createHostWindow(): BrowserWindow {
 	});
 	window.loadFile(path.join(dirname, '../../ui/index.html'));
 	window.once('ready-to-show', () => window.show());
+	hostWindow = window;
+	window.on('closed', () => {
+		hostWindow = undefined;
+	});
 	return window;
 }
 

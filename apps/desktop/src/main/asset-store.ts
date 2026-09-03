@@ -86,6 +86,33 @@ const KIND_FILTERS: Record<string, Array<{ name: string; extensions: string[] }>
 	data: [{ name: 'Data', extensions: ['json', 'txt', 'csv', 'bin'] }]
 };
 
+const EXTENSION_MIMES: Record<string, string> = {
+	png: 'image/png',
+	jpg: 'image/jpeg',
+	jpeg: 'image/jpeg',
+	webp: 'image/webp',
+	gif: 'image/gif',
+	bmp: 'image/bmp',
+	svg: 'image/svg+xml',
+	mp4: 'video/mp4',
+	webm: 'video/webm',
+	mov: 'video/quicktime',
+	mp3: 'audio/mpeg',
+	wav: 'audio/wav',
+	ogg: 'audio/ogg',
+	flac: 'audio/flac',
+	json: 'application/json',
+	txt: 'text/plain',
+	csv: 'text/csv',
+	bin: 'application/octet-stream'
+};
+
+/** Best-effort mime from the picked file's extension (dialog filters already gate it). */
+export function mimeForPath(filePath: string): string {
+	const extension = filePath.split('.').pop()?.toLowerCase() ?? '';
+	return EXTENSION_MIMES[extension] ?? 'application/octet-stream';
+}
+
 /**
  * Asset pick flow: dialog (Host chrome) → read in Main → session store. Returns
  * `undefined` when the user cancels.
@@ -103,6 +130,7 @@ export async function pickAsset(
 	});
 	if (result.canceled || result.filePaths === undefined || result.filePaths.length === 0) return undefined;
 	const { readFile } = await import('node:fs/promises');
-	const bytes = new Uint8Array(await readFile(result.filePaths[0] as string));
-	return store.store(sessionId, { mime: 'application/octet-stream', bytes });
+	const pickedPath = result.filePaths[0] as string;
+	const bytes = new Uint8Array(await readFile(pickedPath));
+	return store.store(sessionId, { mime: mimeForPath(pickedPath), bytes });
 }

@@ -112,6 +112,24 @@
 			white-space: pre-wrap;
 		}
 		#status.is-error { color: var(--deshelf-danger); }
+		/* 横屏工作区约束：视口过窄时阻止正常工作区渲染（AGENTS.md Hard Constraints）。 */
+		.viewport-guard {
+			display: none;
+			position: fixed;
+			inset: 0;
+			background: var(--deshelf-bg);
+			color: var(--deshelf-text-dim);
+			align-items: center;
+			justify-content: center;
+			text-align: center;
+			font: 14px/1.6 var(--deshelf-font);
+			padding: 24px;
+			z-index: 100;
+		}
+		@media (max-width: 719px) {
+			.viewport-guard { display: flex; }
+			.app { display: none; }
+		}
 		.inspector__section { margin-bottom: 12px; }
 		.inspector__section-title {
 			font-size: 11px;
@@ -134,6 +152,7 @@
 	</style>
 </head>
 <body>
+	<div class="viewport-guard">Deshelf Desktop requires a viewport of at least 720px in width.</div>
 	<div class="app">
 		<header class="app__header">
 			<h1>Deshelf Desktop</h1>

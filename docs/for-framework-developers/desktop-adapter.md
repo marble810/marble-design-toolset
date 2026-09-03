@@ -60,7 +60,7 @@ apps/desktop/
 ```
 
 - 构建键是对 Tool Project 源文件（manifest/index/canvas/slate 等按相对路径排序后哈希）的内容寻址；未变更的工程直接命中 cache，不重编译。
-- 构建在**隔离子进程**中执行（`ControlledBuildExecutor`）：hard timeout，超时 kill，结果经 result file 回传；Electron 下子进程以 `ELECTRON_RUN_AS_NODE=1` 运行。开发态可用 `InProcessBuildExecutor`。
+- 构建在**受控子进程**中执行（`ControlledBuildExecutor`）：hard timeout，超时 kill，结果经 result file 回传；Electron 下子进程以 `ELECTRON_RUN_AS_NODE=1` 运行。开发态（仓库内直接 `electron .`）可退回 `InProcessBuildExecutor`（TS runner 无法被 node 直接执行；打包时由 packaging step 编译为 JS 并配置 `controlled-build-runner.js`）。
 - **可部署 Forge Profile**：部署形态通过 `forge/forge-resources.json` 指向随应用发行的**已编译** worker resources（`createDeployedForgeProfileResolver`）；开发态由 workspace packages 解析（`createDevForgeProfileResolver`）。运行期不依赖 monorepo source paths（`build-supplies.ts` 在打包时与主进程 bundle 一起编译）。
 - 构建产物还包括容器供给：Framework Library import map bundles（共享 chunks，单一 runtime 实例）、Desktop 容器 bootstrap bundle、`container.html`。
 

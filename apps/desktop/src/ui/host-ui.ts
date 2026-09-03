@@ -101,10 +101,10 @@ function renderAssetAndExportBars(entry: CatalogEntry): void {
 	}
 }
 
-function mountInspector(entry: CatalogEntry): void {
+function mountInspector(entry: CatalogEntry, host: NonNullable<typeof controller>['session']['inspector']): void {
 	inspector?.dispose();
 	elements.inspectorHost.textContent = '';
-	inspector = renderInspector(controller?.session.inspector as never, entry);
+	inspector = renderInspector(host, entry);
 	elements.inspectorHost.appendChild(inspector.root);
 }
 
@@ -129,7 +129,7 @@ async function openTool(catalogEntryId: string): Promise<void> {
 	};
 	controller = new DesktopToolController(options);
 	await controller.open();
-	mountInspector(entry);
+	mountInspector(entry, controller.session.inspector);
 	renderAssetAndExportBars(entry);
 	renderToolList();
 }
