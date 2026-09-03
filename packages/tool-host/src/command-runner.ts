@@ -37,6 +37,13 @@ interface Invocation {
 	invocationId: string;
 	timeoutCancel: () => void;
 	graceCancel: () => void;
+	/**
+	 * True once timeout + cancel grace elapsed: the callback ignored cancel. The
+	 * invocation is permanently locked until the runner is disposed (Restart): a late
+	 * `command.result` must NOT unlock it, emit a terminal status or re-enable the
+	 * control, because Session health is already Unresponsive.
+	 */
+	locked: boolean;
 }
 
 export class ToolCommandRunner {
@@ -66,7 +73,8 @@ export class ToolCommandRunner {
 			commandId,
 			invocationId,
 			timeoutCancel: () => {},
-			graceCancel: () => {}
+			graceCancel: () => {},
+			locked: false
 		};
 		this.active.set(invocationId, invocation);
 		this.live.set(commandId, invocationId);
@@ -77,10 +85,16 @@ export class ToolCommandRunner {
 		return { ok: true, invocationId };
 	}
 
-	/** Container-reported outcome (`command.result` event). Unknown invocations are ignored. */
+	/**
+	 * Container-reported outcome (`command.result` event). Unknown invocations are
+	 * ignored. A locked invocation (cancel-grace already expired, Session health is
+	 * Unresponsive) stays locked: the result is dropped without emitting a terminal
+	 * status, so the single-flight slot and the bound controls remain unavailable
+	 * until the runner is disposed (Restart Tool).
+	 */
 	onResult(invocationId: string, ok: boolean, diagnostic?: Diagnostic): void {
 		const invocation = this.active.get(invocationId);
-		if (invocation === undefined) return;
+		if (invocation === undefined || invocation.locked) return;
 		invocation.timeoutCancel();
 		invocation.graceCancel();
 		this.active.delete(invocationId);
@@ -120,6 +134,10 @@ export class ToolCommandRunner {
 		this.options.sendCancel(invocation.invocationId);
 		invocation.graceCancel = this.options.timer.schedule(() => {
 			if (!this.active.has(invocation.invocationId)) return;
+			// The callback ignored cancel: lock the invocation so a late result can never
+			// unlock it, then report the terminal 'canceled' state and the Unresponsive
+			// health. The invocation stays in `active`/`live` until runner disposal.
+			invocation.locked = true;
 			this.emitStatus({ commandId: invocation.commandId, invocationId: invocation.invocationId, status: 'canceled' });
 			this.options.onUnresponsive();
 		}, this.options.runtimeConfig.cancelGraceMs);

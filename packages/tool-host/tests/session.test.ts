@@ -101,21 +101,16 @@ describe('session lifecycle', () => {
 });
 
 describe('slate lifecycle', () => {
-	test('slate readiness does not block Main Ready', () => {
+	test('slate boot requires Main Ready; it never blocks Main Ready and only boots after', () => {
 		const { session, recorder } = makeSession();
 		const slate = makeRecordedPair();
 		session.boot({ main: recorder.pair.host, surface: { kind: 'canvas', width: 800, height: 600 } });
 
-		// slate boots and becomes ready FIRST
-		session.bootSlate({ transport: slate.pair.host, surface: { kind: 'slate', width: 320, height: 480 } });
-		slate.sendFromContainer(createEnvironmentEnvelope({
-			sessionId: session.sessionId,
-			kind: 'event',
-			name: 'surface.ready',
-			payload: { endpoint: 'slate', surface: 'slate' }
-		}));
+		// Slate must not boot before Main is Ready: rejected, no envelope sent.
+		expect(() => session.bootSlate({ transport: slate.pair.host, surface: { kind: 'slate', width: 320, height: 480 } })).toThrow(/slate-boot/);
+		expect(slate.fromHost).toHaveLength(0);
 		expect(session.getState()).toBe('Booting');
-		expect(session.isSlateReady()).toBe(true);
+		expect(session.isSlateReady()).toBe(false);
 
 		recorder.sendFromContainer(createEnvironmentEnvelope({
 			sessionId: session.sessionId,
@@ -123,6 +118,22 @@ describe('slate lifecycle', () => {
 			name: 'surface.ready',
 			payload: { endpoint: 'main', surface: 'canvas' }
 		}));
+
+		// After Main Ready the app may boot the Slate; readiness still needs slate surface.ready.
+		session.bootSlate({ transport: slate.pair.host, surface: { kind: 'slate', width: 320, height: 480 } });
+		expect(session.getState()).toBe('Ready');
+		expect(slate.fromHost[0]).toBeDefined();
+		expect(slate.fromHost[0]?.name).toBe('boot');
+		expect((slate.fromHost[0]?.payload as { endpoint: string }).endpoint).toBe('slate');
+		expect(session.isSlateReady()).toBe(false); // not ready until slate surface.ready
+
+		slate.sendFromContainer(createEnvironmentEnvelope({
+			sessionId: session.sessionId,
+			kind: 'event',
+			name: 'surface.ready',
+			payload: { endpoint: 'slate', surface: 'slate' }
+		}));
+		expect(session.isSlateReady()).toBe(true);
 		expect(session.getState()).toBe('Ready');
 	});
 
@@ -130,14 +141,14 @@ describe('slate lifecycle', () => {
 		const { session, recorder, timer } = makeSession();
 		const slate = makeRecordedPair();
 		session.boot({ main: recorder.pair.host, surface: { kind: 'canvas', width: 800, height: 600 } });
-		session.bootSlate({ transport: slate.pair.host, surface: { kind: 'slate', width: 320, height: 480 } });
 		recorder.sendFromContainer(createEnvironmentEnvelope({
 			sessionId: session.sessionId,
 			kind: 'event',
 			name: 'surface.ready',
 			payload: { endpoint: 'main', surface: 'canvas' }
 		}));
-		expect(session.getState()).toBe('Ready');
+		session.bootSlate({ transport: slate.pair.host, surface: { kind: 'slate', width: 320, height: 480 } });
+		expect(slate.fromHost.filter((m) => m.name === 'boot')).toHaveLength(1); // timeout starts at actual boot
 		timer.advance(1000); // slate never reports ready
 		expect(session.getState()).toBe('Ready');
 		expect(session.getDiagnostics().some((d) => d.code === 'session/slate-timeout')).toBe(true);
@@ -147,6 +158,12 @@ describe('slate lifecycle', () => {
 		const { session, recorder } = makeSession();
 		const slate = makeRecordedPair();
 		session.boot({ main: recorder.pair.host, surface: { kind: 'canvas', width: 800, height: 600 } });
+		recorder.sendFromContainer(createEnvironmentEnvelope({
+			sessionId: session.sessionId,
+			kind: 'event',
+			name: 'surface.ready',
+			payload: { endpoint: 'main', surface: 'canvas' }
+		}));
 		session.bootSlate({ transport: slate.pair.host, surface: { kind: 'slate', width: 320, height: 480 } });
 		slate.sendFromContainer(createEnvironmentEnvelope({
 			sessionId: session.sessionId,

@@ -69,22 +69,49 @@ describe('ToolCommandRunner', () => {
 		expect(state.statuses).toContainEqual({ commandId: 'resimulate', status: 'failed' });
 	});
 
-	test('cancel grace expiry marks the session Unresponsive; later result is accepted harmlessly', () => {
+	test('cancel grace expiry locks the command: Unresponsive health and late results cannot unlock', () => {
 		const state = makeRunner();
 		const result = state.runner.execute('resimulate');
 		state.timer.advance(1000); // timeout → cancel sent
 		expect(state.unresponsive).toBe(0);
-		state.timer.advance(200); // grace expiry → Unresponsive
+		state.timer.advance(200); // grace expiry → Unresponsive + invocation locked
 		expect(state.unresponsive).toBe(1);
 		expect(state.statuses).toContainEqual({ commandId: 'resimulate', status: 'canceled' });
 
 		if (result.ok) {
-			// late completion must not crash; health stays Unresponsive (Restart is the remedy)
+			// A late completion must NOT unlock the command: no completed status, the
+			// single-flight slot stays occupied and the control stays unavailable until
+			// the runner is disposed (Restart Tool remains the remedy).
 			state.runner.onResult(result.invocationId, true);
-			expect(state.statuses).toContainEqual({ commandId: 'resimulate', status: 'completed' });
+			state.runner.onResult(result.invocationId, false);
+			expect(state.statuses.some((s) => s.status === 'completed' || s.status === 'failed')).toBe(false);
+			expect(state.runner.hasActive('resimulate')).toBe(true);
 			const again = state.runner.execute('resimulate');
-			expect(again.ok).toBe(true);
+			expect(again.ok).toBe(false);
+			if (!again.ok) expect(again.diagnostic.code).toBe('command/single-flight');
 		}
+	});
+
+	test('a different command stays executable while one invocation is locked', () => {
+		const state = makeRunner();
+		state.runner.execute('resimulate');
+		state.timer.advance(1000 + 200); // grace expired → locked + Unresponsive
+		// single-flight is per command id: another command runs normally
+		const other = state.runner.execute('animate');
+		expect(other.ok).toBe(true);
+		expect(state.sent.filter((m) => m.kind === 'execute' && m.commandId === 'animate')).toHaveLength(1);
+	});
+
+	test('dispose releases a locked invocation so a fresh runner can execute again', () => {
+		const state = makeRunner();
+		state.runner.execute('resimulate');
+		state.timer.advance(1000 + 200); // locked + Unresponsive
+		expect(state.unresponsive).toBe(1);
+		state.runner.dispose();
+
+		const fresh = makeRunner();
+		const again = fresh.runner.execute('resimulate');
+		expect(again.ok).toBe(true);
 	});
 
 	test('unknown invocation results are ignored', () => {

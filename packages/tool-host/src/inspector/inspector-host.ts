@@ -212,9 +212,12 @@ export class InspectorHost {
 	private onCommandStatus(event: CommandStatusEvent): void {
 		const elementId = this.invocationElements.get(event.invocationId);
 		if (elementId === undefined) return;
-		if (event.status === 'completed' || event.status === 'failed' || event.status === 'canceled') {
+		if (event.status === 'completed' || event.status === 'failed') {
 			this.invocationElements.delete(event.invocationId);
 		}
+		// 'canceled' (cancel-grace expired, callback still running) keeps the invocation
+		// mapped so the control stays unavailable while Session health is Unresponsive;
+		// only Restart (Inspector disposal) releases it.
 		this.emit();
 	}
 

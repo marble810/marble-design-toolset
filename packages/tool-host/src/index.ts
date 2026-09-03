@@ -34,9 +34,9 @@ export type {
 
 export { InspectorHost } from './inspector/inspector-host.ts';
 export type { ActionStatusSource, InspectorHostOptions, InspectorNodeState, InspectorViewModel } from './inspector/inspector-host.ts';
-export { buildDefaultInspectorTree } from './inspector/default-tree.ts';
+export { buildDefaultInspectorTree, resolveInspectorTree } from './inspector/default-tree.ts';
 
-export { ToolSession, migrateParameterValues, ReloadHandle } from './session.ts';
+export { ToolSession, migrateParameterValues, migrateAssetState, ReloadHandle, createBootEnvelope, MAIN_ONLY_MESSAGE_CODE } from './session.ts';
 export type {
 	BootOptions,
 	ChannelRole,

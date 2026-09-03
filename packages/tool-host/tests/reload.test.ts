@@ -232,8 +232,3 @@ describe('staged reload', () => {
 		expect(changed.length).toBe(before + 1);
 	});
 });
-
-/** TS helper to avoid unused-import noise in the middle of the file. */
-function mainFrom(session: ToolSession): void {
-	void session;
-}

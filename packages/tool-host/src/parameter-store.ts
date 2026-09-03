@@ -32,6 +32,12 @@ export interface ComputeRequest {
 export interface ComputeOutcome {
 	values: Record<string, ParameterValue>;
 	diagnostics?: readonly Diagnostic[];
+	/**
+	 * Host-side deferral: no compute channel existed when the wave ran (HostReady phase
+	 * or pre-adoption staging). The wave stays dirty and retries after Main boot or on
+	 * the next commit instead of being consumed as "completed with no values".
+	 */
+	defer?: boolean;
 }
 
 /** Host wiring: the session sends `parameter.compute` over the Main channel and resolves with the reply. */
@@ -46,6 +52,11 @@ export type Unsubscribe = () => void;
 export interface ParameterStoreOptions {
 	descriptors: Record<string, ParameterDescriptor>;
 	compute: ComputeExecutor;
+	/**
+	 * Host wiring: true when a compute channel is available (false during HostReady, so
+	 * waves stay dirty instead of being consumed or timed out prematurely).
+	 */
+	canCompute?: () => boolean;
 	runtimeConfig?: Partial<DeshelfRuntimeConfig>;
 	timer?: Timer;
 }
@@ -99,6 +110,7 @@ export function validateParameterValue(descriptor: ParameterDescriptor, value: u
 export class ParameterStore {
 	private readonly descriptors: Record<string, ParameterDescriptor>;
 	private readonly executor: ComputeExecutor;
+	private readonly canCompute?: () => boolean;
 	private readonly runtimeConfig: DeshelfRuntimeConfig;
 	private readonly timer: Timer;
 
@@ -122,6 +134,7 @@ export class ParameterStore {
 	constructor(options: ParameterStoreOptions) {
 		this.descriptors = options.descriptors;
 		this.executor = options.compute;
+		this.canCompute = options.canCompute;
 		this.runtimeConfig = resolveRuntimeConfig(options.runtimeConfig);
 		this.timer = options.timer ?? defaultTimer;
 
@@ -229,16 +242,24 @@ export class ParameterStore {
 			if (this.values.get(id) === descriptor.default) continue;
 			results.push(this.set(id, descriptor.default as ParameterValue));
 		}
-		this.scheduleComputed(computedIds);
+		// Explicit full recompute: every computed id (including leaves without dependents)
+		// and any downstream dependent chains, in topological waves.
+		this.scheduleRecompute(computedIds);
 		return results;
 	}
 
 	/** Recomputes every computed parameter from current values (used after Reload migration). */
 	recomputeComputed(): void {
 		if (this.closed) return;
-		this.scheduleComputed(
+		this.scheduleRecompute(
 			Object.keys(this.descriptors).filter((id) => this.descriptors[id]?.mode === 'computed')
 		);
+	}
+
+	/** Re-pumps waves deferred while no compute channel existed (e.g. called after Main boot). */
+	retryPendingComputed(): void {
+		if (this.closed) return;
+		this.pump();
 	}
 
 	/**
@@ -283,11 +304,30 @@ export class ParameterStore {
 		}
 	}
 
-	/** Marks computed params transitively affected by the changed ids and starts scheduling. */
+	/**
+	 * Marks computed params transitively affected by changed manual/overrideable values
+	 * and starts scheduling. The changed ids themselves are never re-executed here — this
+	 * is the dependents-only path for value commits.
+	 */
 	private scheduleComputed(changedIds: readonly string[]): void {
 		if (this.closed || this.pendingComputed.size === 0 && changedIds.length === 0) return;
 		const affected = this.collectAffected(changedIds);
 		if (affected.size === 0) return;
+		for (const id of affected) this.pendingComputed.add(id);
+		this.pump();
+	}
+
+	/**
+	 * Explicit recompute of specific computed ids: the roots themselves (including leaves
+	 * without dependents) plus their downstream dependent chains, in topological waves.
+	 * Used by Reset Defaults and staged Reload migration.
+	 */
+	private scheduleRecompute(roots: readonly string[]): void {
+		if (this.closed) return;
+		const computedRoots = roots.filter((id) => this.descriptors[id]?.mode === 'computed');
+		if (computedRoots.length === 0) return;
+		const affected = this.collectAffected(computedRoots);
+		for (const id of computedRoots) affected.add(id);
 		for (const id of affected) this.pendingComputed.add(id);
 		this.pump();
 	}
@@ -315,6 +355,10 @@ export class ParameterStore {
 	 */
 	private pump(): void {
 		if (this.closed || this.computeInFlight || this.pendingComputed.size === 0) return;
+		// No compute channel yet (HostReady phase / pre-adoption staging): leave the waves
+		// dirty — they are retried by retryPendingComputed() after Main boot or by the
+		// next commit, instead of being consumed as "completed with no values".
+		if (this.canCompute !== undefined && !this.canCompute()) return;
 		const wave: string[] = [];
 		for (const id of this.pendingComputed) {
 			const ready = (this.descriptors[id]?.dependsOn ?? []).every((dep) => {
@@ -337,6 +381,9 @@ export class ParameterStore {
 		try {
 			outcome = await this.executor(request);
 		} catch {
+			// Teardown (restart/close/release) rejected this batch: the store is closed and
+			// the session already detached its subscriptions — stay silent.
+			if (this.closed) return;
 			// Executor failure (transport error / timeout): keep the last legal values,
 			// report a diagnostic, and leave the wave dirty so a future commit retries.
 			this.emitDiagnostic(
@@ -346,13 +393,22 @@ export class ParameterStore {
 			this.computeInFlight = false;
 			return;
 		}
-		this.commitComputed(request.ids, outcome);
+		if (this.closed) return;
 		this.computeInFlight = false;
+		if (outcome.defer === true) {
+			// No channel existed (HostReady / pre-adoption staging): keep the wave dirty so
+			// Main boot (retryPendingComputed) or the next commit re-pumps it. Do NOT pump
+			// here — the same wave would be ready again and the loop would never end.
+			for (const id of request.ids) this.pendingComputed.add(id);
+			return;
+		}
+		this.commitComputed(request.ids, outcome);
 		this.pump();
 	}
 
 	/** Validates and commits computed results; illegal values keep the last legal value + diagnostic. */
 	private commitComputed(ids: readonly string[], outcome: ComputeOutcome): void {
+		if (this.closed) return;
 		for (const diagnostic of outcome.diagnostics ?? []) this.emitDiagnostic(diagnostic);
 		for (const id of ids) {
 			const value = outcome.values[id];

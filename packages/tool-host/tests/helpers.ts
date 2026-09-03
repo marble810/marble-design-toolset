@@ -124,6 +124,8 @@ export function makeRecordedPair() {
 	};
 }
 
+export type RecordedPair = ReturnType<typeof makeRecordedPair>;
+
 /** Manual compute executor: waves are resolved/rejected explicitly by the test. */
 export function makeManualCompute() {
 	let resolveFn: ((values: Record<string, number>) => void) | null = null;
