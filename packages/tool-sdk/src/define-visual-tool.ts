@@ -38,9 +38,14 @@ export interface AssetSlotDefinition {
 	required?: boolean;
 }
 
+export interface CommandExecutionContext {
+	/** Aborted when the Host sends command.cancel; callbacks decide how to stop safely. */
+	readonly signal: AbortSignal;
+}
+
 export interface CommandDefinition {
 	label: string;
-	run: (...args: never[]) => unknown;
+	run: (context: CommandExecutionContext) => unknown;
 }
 
 export interface VisualOutputDefinition {

@@ -60,6 +60,7 @@ export type {
 	EnvironmentMessageName,
 	EnvironmentMessagePayload,
 	EnvironmentProtocolVersion,
+	ExportContent,
 	ExportExecutePayload,
 	ExportResultPayload,
 	ParameterChangedPayload,

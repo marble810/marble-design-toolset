@@ -271,6 +271,13 @@ Restart 不构建，使用当前 Catalog Entry 与 artifact 创建新 Session ID
 
 两端共用 Tool Manifest、Tool Entry、Catalog Entry、Environment API、Parameter/Inspector 语义和 conformance tests。
 
+### Web 实现要点
+
+- 构建期由 `scripts/build-web-catalog.ts` 扫描 `tools/`，调用共享 Builder 并原子发布 `static/deshelf/` 下的静态 Catalog、预编译 artifacts、Framework Library bundles 与容器页；失败条目不进入可用 Catalog。
+- 容器页以 import map 供给 `svelte` 与声明的 Framework Libraries；共享 internals 落在 shared chunks，保证单一 runtime 实例。
+- 容器 iframe 有意不设 `sandbox`：sandbox 会产生 opaque unique origin，破坏同源供给；同样不引入 Capability Grant。
+- **风险声明**：same-origin iframe 与 Host 同处一个 renderer process，Tool 死循环会卡死页面；产品接受此风险，不承诺 failure isolation，Restart 位于 Host chrome。实现细节与风险记录见 [`../for-framework-developers/web-iframe-adapter.md`](../for-framework-developers/web-iframe-adapter.md)。
+
 ## 12. 当前迁移原则
 
 旧实现中的 `tool-registry.ts`、`metadata.json`、root master Svelte component、Tool-owned LeftPanel/RightPanel、Tool-owned source controller、同 realm Svelte contexts 与 runtime exporter registration 是待替换 implementation，不得继续深化。

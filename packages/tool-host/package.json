@@ -8,10 +8,15 @@
 		".": {
 			"types": "./src/index.ts",
 			"default": "./src/index.ts"
+		},
+		"./conformance": {
+			"types": "./src/conformance/index.ts",
+			"default": "./src/conformance/index.ts"
 		}
 	},
 	"dependencies": {
-		"tool-contract": "workspace:*"
+		"tool-contract": "workspace:*",
+		"tool-sdk": "workspace:*"
 	},
 	"scripts": {
 		"test": "bun test"

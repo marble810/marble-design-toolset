@@ -148,10 +148,19 @@ export interface ExportExecutePayload {
 	invocationId: string;
 }
 
+/**
+ * Exported Visual Output content handed back through `export.result`. Only serializable
+ * references cross the seam (Web blob URL, Desktop opaque handle) — real filesystem
+ * paths and raw pixels never travel in the envelope. Same shape as AssetContent.
+ */
+export type ExportContent = AssetContent;
+
 export interface ExportResultPayload {
 	invocationId: string;
 	ok: boolean;
 	error?: Diagnostic;
+	/** Present when ok and the environment adapter produced content. */
+	content?: ExportContent;
 }
 
 export interface DiagnosticEmitPayload {
@@ -619,10 +628,16 @@ const MESSAGE_SCHEMAS: Record<
 			const invocationId = vNonEmptyString(input.invocationId, `${path}.invocationId`, diagnostics);
 			const ok = vBoolean(input.ok, `${path}.ok`, diagnostics);
 			if (invocationId === undefined || ok === undefined) return undefined;
+			let content: ExportContent | undefined;
+			if (input.content !== undefined) {
+				content = vAssetContent(input.content, `${path}.content`, diagnostics);
+				if (content === undefined) return undefined;
+			}
 			return {
 				invocationId,
 				ok,
-				...(input.error !== undefined ? { error: vDiagnostic(input.error, `${path}.error`, diagnostics) as Diagnostic } : {})
+				...(input.error !== undefined ? { error: vDiagnostic(input.error, `${path}.error`, diagnostics) as Diagnostic } : {}),
+				...(content !== undefined ? { content } : {})
 			};
 		}
 	},

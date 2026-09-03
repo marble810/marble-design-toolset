@@ -6,6 +6,7 @@ export { defineVisualTool } from './define-visual-tool.ts';
 export type {
 	AssetSlotDefinition,
 	CommandDefinition,
+	CommandExecutionContext,
 	ComputeFn,
 	ParameterDefinition,
 	ParameterValue,
@@ -21,6 +22,18 @@ export type { CreateInspectorContextInput, InspectorContext } from './context.ts
 
 export { EnvironmentClient } from './client.ts';
 export type { EnvironmentClientOptions, EnvironmentMessageHandler } from './client.ts';
+
+export {
+	CONTAINER_INBOUND_MESSAGE_NAMES,
+	startToolContainer
+} from './container/runtime.ts';
+export type {
+	ContainerAssetMirror,
+	ContainerParameterMirror,
+	ContainerSurfaceContext,
+	ToolContainerRuntimeHandle,
+	ToolContainerRuntimeOptions
+} from './container/runtime.ts';
 
 export type {
 	AssetHandle,

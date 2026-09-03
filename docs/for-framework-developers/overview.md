@@ -23,6 +23,7 @@
 | [Deshelf 目标架构](../architecture/deshelf-architecture.md) | Catalog、Tool Containers、Environment API 与 migration 总设计 |
 | [现有代码迁移分析](../architecture/current-code-migration-analysis.md) | 当前 modules 的保留、替换、删除与 implementation 顺序 |
 | [Host 与 Tool 的 seam](./host-tool-boundary.md) | Forge/Host/Tool ownership 与 validation 时机 |
+| [Web same-origin iframe adapter](./web-iframe-adapter.md) | 静态 Catalog 生成、iframe Container、transport 与 conformance tests |
 | [Tool SDK interface](./public-sdk.md) | `defineVisualTool`、Inspector descriptor 与 Environment client |
 | [Runtime 与 Workspace](./runtime-and-shell.md) | Session lifecycle、Parameter flow、Reload 与 adapters |
 | [Scaffolding and recipes](./scaffolding-and-recipes.md) | Tool Project 脚手架与模板维护 |

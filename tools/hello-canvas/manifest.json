@@ -1,0 +1,11 @@
+{
+	"contractVersion": 1,
+	"projectId": "3e5a1c9b-7d24-4f8e-9a31-b2c8d6e4f5a7",
+	"slug": "hello-canvas",
+	"name": "Hello Canvas",
+	"description": "Minimal Deshelf Web adapter verification tool: animated hue field with computed glow.",
+	"tags": ["sample", "canvas2d"],
+	"version": "1.0.0",
+	"forgeProfile": "forge-v1",
+	"libraries": []
+}

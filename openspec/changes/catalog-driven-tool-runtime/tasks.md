@@ -15,11 +15,11 @@
 
 ## 3. Web adapter（MAB-69）
 
-- [ ] 3.1 构建期扫描 bundled Tool Projects，调用共享 Builder 并原子生成 Web static Catalog。
-- [ ] 3.2 实现 same-origin Main iframe Tool Container 与 boot/ready。
-- [ ] 3.3 实现可选 Slate iframe，确保不阻塞 Canvas Ready。
-- [ ] 3.4 供给 Forge libraries、Asset/Export adapters 与 Host diagnostics。
-- [ ] 3.5 通过共享 Environment API conformance tests。
+- [x] 3.1 构建期扫描 bundled Tool Projects，调用共享 Builder 并原子生成 Web static Catalog。
+- [x] 3.2 实现 same-origin Main iframe Tool Container 与 boot/ready。
+- [x] 3.3 实现可选 Slate iframe，确保不阻塞 Canvas Ready。
+- [x] 3.4 供给 Forge libraries、Asset/Export adapters 与 Host diagnostics。
+- [x] 3.5 通过共享 Environment API conformance tests。
 
 ## 4. Desktop adapter（MAB-68）
 

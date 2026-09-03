@@ -27,3 +27,6 @@ vite.config.ts.timestamp-*
 
 # Subagent run artifacts
 .pi-subagents/
+
+# Generated Deshelf Web static Catalog (scripts/build-web-catalog.ts)
+/static/deshelf

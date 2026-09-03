@@ -26,6 +26,7 @@ import {
 	type EnvironmentEnvelope,
 	type EnvironmentInventory,
 	type EnvironmentTransport,
+	type ExportContent,
 	type InspectorBinding,
 	type ParameterSnapshot,
 	type ParameterSetResponsePayload,
@@ -76,7 +77,7 @@ type ComputePending = {
 };
 
 type ExportPending = {
-	resolve: (payload: { invocationId: string; ok: boolean; error?: Diagnostic }) => void;
+	resolve: (payload: { invocationId: string; ok: boolean; error?: Diagnostic; content?: ExportContent }) => void;
 	reject: (reason: Error) => void;
 	cancel: () => void;
 };
@@ -294,6 +295,24 @@ export class ToolSession {
 		this.startupCancel = this.timer.schedule(() => this.failStartup(), this.runtimeConfig.startupTimeoutMs);
 	}
 
+	/**
+	 * Host chrome resize of one Surface: forwards a `surface.resize` event on the given
+	 * channel only. The Surface size lives in the Container; pixels and rAF never cross
+	 * the Environment API — this is a small control-plane notification.
+	 */
+	resizeSurface(role: ChannelRole, size: { width: number; height: number }): void {
+		const channel = this.channelFor(role);
+		if (channel === undefined || this.state === 'Closed') return;
+		channel.send(
+			createEnvironmentEnvelope({
+				sessionId: this.sessionId,
+				kind: 'event',
+				name: 'surface.resize',
+				payload: { width: size.width, height: size.height }
+			})
+		);
+	}
+
 	/** Reset Defaults: restores manual/overrideable defaults and recomputes; no Container change. */
 	resetDefaults(): ParameterSetResult[] {
 		if (this.state === 'Closed') return [];
@@ -335,7 +354,7 @@ export class ToolSession {
 	}
 
 	/** Export through the Main artifact (`export.*` family); resolves on export.result. */
-	executeExport(outputId: string): Promise<{ invocationId: string; ok: boolean; error?: Diagnostic }> {
+	executeExport(outputId: string): Promise<{ invocationId: string; ok: boolean; error?: Diagnostic; content?: ExportContent }> {
 		if (this.state !== 'Ready' || this.mainChannel === undefined) {
 			return Promise.reject(new Error(`session/state: export requires a Ready session, got '${this.state}'`));
 		}
@@ -465,7 +484,7 @@ export class ToolSession {
 					this.dropMainOnlyMessage(envelope.name);
 					return;
 				}
-				const result = payload as { invocationId: string; ok: boolean; error?: Diagnostic };
+				const result = payload as { invocationId: string; ok: boolean; error?: Diagnostic; content?: ExportContent };
 				const pending = this.exportPending.get(result.invocationId);
 				if (pending === undefined) return;
 				this.exportPending.delete(result.invocationId);
