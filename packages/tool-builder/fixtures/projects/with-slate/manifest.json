@@ -1,0 +1,9 @@
+{
+	"contractVersion": 1,
+	"projectId": "9f3d2b0f-2222-4333-9444-555566667777",
+	"slug": "with-slate",
+	"name": "With Slate",
+	"version": "1.0.0",
+	"forgeProfile": "forge-v1",
+	"libraries": []
+}

@@ -1,0 +1,9 @@
+{
+	"contractVersion": 1,
+	"projectId": "aa4d3c10-3333-4444-8555-666677778888",
+	"slug": "throwing-inspector",
+	"name": "Throwing Inspector",
+	"version": "1.0.0",
+	"forgeProfile": "forge-v1",
+	"libraries": []
+}

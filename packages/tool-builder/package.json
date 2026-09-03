@@ -1,0 +1,23 @@
+{
+	"name": "tool-builder",
+	"private": true,
+	"version": "0.0.0",
+	"type": "module",
+	"description": "Deshelf build-time Tool Project compilation, controlled extraction and Catalog upsert",
+	"exports": {
+		".": {
+			"types": "./src/index.ts",
+			"default": "./src/index.ts"
+		}
+	},
+	"dependencies": {
+		"tool-contract": "workspace:*",
+		"tool-sdk": "workspace:*",
+		"vite": "^8.0.7",
+		"svelte": "^5.55.2",
+		"@sveltejs/vite-plugin-svelte": "^7.0.0"
+	},
+	"scripts": {
+		"test": "bun test"
+	}
+}

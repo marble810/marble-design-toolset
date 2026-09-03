@@ -1,0 +1,9 @@
+{
+	"contractVersion": 1,
+	"projectId": "bb5e4d20-4444-5555-8666-777788889999",
+	"slug": "hanging-inspector",
+	"name": "Hanging Inspector",
+	"version": "1.0.0",
+	"forgeProfile": "forge-v1",
+	"libraries": []
+}

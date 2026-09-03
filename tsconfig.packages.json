@@ -1,0 +1,25 @@
+{
+	"compilerOptions": {
+		"target": "ES2022",
+		"lib": ["ES2022"],
+		"module": "ESNext",
+		"moduleResolution": "bundler",
+		"strict": true,
+		"noEmit": true,
+		"skipLibCheck": true,
+		"isolatedModules": true,
+		"allowImportingTsExtensions": true,
+		"forceConsistentCasingInFileNames": true,
+		"types": ["node"],
+		"noUnusedLocals": false,
+		"noUnusedParameters": false
+	},
+	"include": [
+		"packages/tool-contract/src/**/*.ts",
+		"packages/tool-contract/type-tests/**/*.ts",
+		"packages/tool-sdk/src/**/*.ts",
+		"packages/tool-sdk/type-tests/**/*.ts",
+		"packages/tool-builder/src/**/*.ts",
+		"packages/tool-builder/type-tests/**/*.ts"
+	]
+}

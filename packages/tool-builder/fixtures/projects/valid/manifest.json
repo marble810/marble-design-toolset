@@ -1,0 +1,11 @@
+{
+	"contractVersion": 1,
+	"projectId": "8f2c1a0e-1111-4222-8333-444455556666",
+	"slug": "shallow-water",
+	"name": "Shallow Water",
+	"description": "Pipeline fixture Tool Project.",
+	"tags": ["simulation", "height-map"],
+	"version": "1.0.0",
+	"forgeProfile": "forge-v1",
+	"libraries": ["three"]
+}

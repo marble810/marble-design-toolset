@@ -1,0 +1,19 @@
+{
+	"name": "tool-sdk",
+	"private": true,
+	"version": "0.0.0",
+	"type": "module",
+	"description": "Deshelf defineVisualTool and descriptor-only Inspector SDK",
+	"exports": {
+		".": {
+			"types": "./src/index.ts",
+			"default": "./src/index.ts"
+		}
+	},
+	"devDependencies": {
+		"tool-contract": "workspace:*"
+	},
+	"scripts": {
+		"test": "bun test"
+	}
+}
