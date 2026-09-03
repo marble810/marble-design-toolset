@@ -4,17 +4,19 @@
 	"version": "0.0.1",
 	"type": "module",
 	"workspaces": [
-		"packages/*"
+		"packages/*",
+		"apps/*"
 	],
 	"scripts": {
 		"dev": "bun ./scripts/build-web-catalog.ts && vite dev",
 		"build": "bun ./scripts/build-web-catalog.ts && vite build",
 		"forge:web-catalog": "bun ./scripts/build-web-catalog.ts",
 		"smoke:web-adapter": "bun ./scripts/smoke-web-adapter.mjs",
+		"dev:desktop": "bun run --cwd apps/desktop app:dev",
 		"create:tool": "bun ./scripts/create-tool.js",
 		"test": "bun test",
 		"test:legacy": "node --test src/lib/docs/catalog.test.ts src/lib/runtime/tool-availability.test.mjs src/lib/runtime/workspace-state.test.ts src/lib/runtime/workspace-controller/helpers.test.ts src/lib/runtime/tech-stack.test.ts src/lib/runtime/tool-runtime-context.test.ts src/lib/runtime/preset-init-map.test.ts src/lib/runtime/io/io.test.ts src/lib/runtime/canvas-export/canvas-export.test.ts src/lib/runtime/render-host/lifecycle-core.test.ts src/lib/runtime/file-input/file-input.test.ts src/lib/runtime/layout-tool/layout-tool.test.ts src/lib/components/shell/preview-canvas/zoom.test.mjs src/lib/components/shell/preview-canvas/footer-info.test.mjs src/tools/shallow-water-height/simulation/parameters.test.ts scripts/tool-scaffold/scaffold.test.mjs scripts/tool-contract/validate.test.mjs",
-		"typecheck": "tsc --noEmit -p tsconfig.packages.json",
+		"typecheck": "tsc --noEmit -p tsconfig.packages.json && tsc --noEmit -p apps/desktop",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''"
 	},

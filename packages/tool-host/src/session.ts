@@ -61,6 +61,12 @@ export interface BootOptions {
 	main: EnvironmentTransport;
 	surface: BootSurface;
 	inventory?: EnvironmentInventory;
+	/**
+	 * Optional pinned Session id for restart. Web adapters leave it unset (fresh random
+	 * id); Desktop adapters pin the id Main issued when opening the replacement realm,
+	 * so container realm tracking and session filtering stay keyed identically.
+	 */
+	sessionId?: string;
 }
 
 export type ReloadResult = { ok: true; handle: ReloadHandle } | { ok: false; diagnostic: Diagnostic };
@@ -280,7 +286,7 @@ export class ToolSession {
 		this.detachChannels();
 		this.teardownRuntime({ disposeRunner: true, clearCompute: true, clearExports: true, reason: 'session-restarted' });
 
-		this.sessionId = crypto.randomUUID();
+		this.sessionId = options.sessionId ?? crypto.randomUUID();
 		this.slateReadyFlag = false;
 		this.store = this.createParameterStore((request) => this.runCompute(request));
 		this.wireStore(this.store);

@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>Deshelf Desktop</title>
+	<style>
+		:root {
+			--deshelf-bg: #14161a;
+			--deshelf-surface: #1c1f26;
+			--deshelf-surface-raised: #23272f;
+			--deshelf-border: #2e333d;
+			--deshelf-text: #e8eaee;
+			--deshelf-text-dim: #9aa1ad;
+			--deshelf-accent: #4f8cff;
+			--deshelf-danger: #ff6b6b;
+			--deshelf-radius: 6px;
+			--deshelf-gap: 8px;
+			--deshelf-font: 13px/1.5 "Segoe UI", system-ui, sans-serif;
+			--deshelf-font-mono: 12px/1.5 Consolas, monospace;
+		}
+		* { box-sizing: border-box; }
+		body {
+			margin: 0;
+			background: var(--deshelf-bg);
+			color: var(--deshelf-text);
+			font: var(--deshelf-font);
+			overflow: hidden;
+		}
+		.app {
+			display: grid;
+			grid-template-columns: 280px 1fr 300px;
+			grid-template-rows: auto auto 1fr;
+			height: 100vh;
+			gap: var(--deshelf-gap);
+			padding: var(--deshelf-gap);
+		}
+		.app__header {
+			grid-column: 1 / -1;
+			display: flex;
+			align-items: center;
+			gap: var(--deshelf-gap);
+			background: var(--deshelf-surface);
+			border: 1px solid var(--deshelf-border);
+			border-radius: var(--deshelf-radius);
+			padding: 8px 12px;
+		}
+		.app__header h1 { font-size: 14px; margin: 0 auto 0 0; font-weight: 600; }
+		button {
+			background: var(--deshelf-surface-raised);
+			color: var(--deshelf-text);
+			border: 1px solid var(--deshelf-border);
+			border-radius: var(--deshelf-radius);
+			padding: 6px 12px;
+			font: inherit;
+			cursor: pointer;
+		}
+		button:hover:not(:disabled) { border-color: var(--deshelf-accent); }
+		button:disabled { opacity: 0.45; cursor: default; }
+		.panel {
+			background: var(--deshelf-surface);
+			border: 1px solid var(--deshelf-border);
+			border-radius: var(--deshelf-radius);
+			padding: 10px;
+			overflow-y: auto;
+		}
+		.panel--left { grid-row: 2 / 4; }
+		.panel--right { grid-row: 2 / 4; display: flex; flex-direction: column; }
+		.tool-list__item {
+			display: flex;
+			flex-direction: column;
+			align-items: stretch;
+			text-align: left;
+			width: 100%;
+			margin-bottom: var(--deshelf-gap);
+		}
+		.tool-list__item.is-active { border-color: var(--deshelf-accent); }
+		.tool-list__meta { color: var(--deshelf-text-dim); font: var(--deshelf-font-mono); }
+		.workspace {
+			grid-row: 2 / 4;
+			display: grid;
+			grid-template-rows: 2fr auto 1fr;
+			gap: var(--deshelf-gap);
+			min-width: 0;
+		}
+		#canvas-host {
+			position: relative;
+			background: var(--deshelf-surface);
+			border: 1px solid var(--deshelf-border);
+			border-radius: var(--deshelf-radius);
+			overflow: hidden;
+			min-height: 0;
+		}
+		#slate-host {
+			position: relative;
+			background: var(--deshelf-surface);
+			border: 1px solid var(--deshelf-border);
+			border-radius: var(--deshelf-radius);
+			overflow: hidden;
+			height: 180px;
+		}
+		.bar {
+			display: flex;
+			gap: var(--deshelf-gap);
+			flex-wrap: wrap;
+		}
+		.bar__action { font-size: 12px; }
+		#status {
+			padding: 4px 12px;
+			color: var(--deshelf-text-dim);
+			font: var(--deshelf-font-mono);
+			white-space: pre-wrap;
+		}
+		#status.is-error { color: var(--deshelf-danger); }
+		.inspector__section { margin-bottom: 12px; }
+		.inspector__section-title {
+			font-size: 11px;
+			text-transform: uppercase;
+			letter-spacing: 0.08em;
+			color: var(--deshelf-text-dim);
+			margin: 0 0 6px;
+		}
+		.inspector__row {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			margin-bottom: 6px;
+		}
+		.inspector__row--slider input[type="range"] { flex: 1; min-width: 0; }
+		.inspector__row--select select,
+		.inspector__row--text input { flex: 1; min-width: 0; }
+		.inspector__control-label { flex: 0 0 96px; color: var(--deshelf-text-dim); }
+		.inspector__value { min-width: 40px; text-align: right; font: var(--deshelf-font-mono); }
+	</style>
+</head>
+<body>
+	<div class="app">
+		<header class="app__header">
+			<h1>Deshelf Desktop</h1>
+			<button type="button" id="open-project">Open Project…</button>
+			<button type="button" id="build-project" disabled>Build Project</button>
+			<button type="button" id="restart-tool" disabled>Restart Tool</button>
+			<button type="button" id="reset-defaults" disabled>Reset Defaults</button>
+			<button type="button" id="close-tool" disabled>Close Session</button>
+		</header>
+		<aside class="panel panel--left">
+			<h2 style="font-size:12px;margin:0 0 8px;">Tools</h2>
+			<div id="tool-list"></div>
+		</aside>
+		<main class="workspace">
+			<div id="canvas-host"></div>
+			<div id="slate-host"></div>
+			<div>
+				<div class="bar" id="asset-bar"></div>
+				<div class="bar" id="export-bar" style="margin-top:8px;"></div>
+				<div id="status"></div>
+			</div>
+		</main>
+		<aside class="panel panel--right">
+			<h2 style="font-size:12px;margin:0 0 8px;">Inspector</h2>
+			<div id="inspector-host"></div>
+		</aside>
+	</div>
+	<script type="module" src="../src/ui/host-ui.ts"></script>
+</body>
+</html>

@@ -278,8 +278,15 @@ Restart 不构建，使用当前 Catalog Entry 与 artifact 创建新 Session ID
 - 容器 iframe 有意不设 `sandbox`：sandbox 会产生 opaque unique origin，破坏同源供给；同样不引入 Capability Grant。
 - **风险声明**：same-origin iframe 与 Host 同处一个 renderer process，Tool 死循环会卡死页面；产品接受此风险，不承诺 failure isolation，Restart 位于 Host chrome。实现细节与风险记录见 [`../for-framework-developers/web-iframe-adapter.md`](../for-framework-developers/web-iframe-adapter.md)。
 
-## 12. 当前迁移原则
+### Desktop 实现要点
 
+- Open Project 身份：`projectId` 是 Manifest 的不可变逻辑身份，`projectLocationId` 来自 realpath 哈希；同 Project ID 多 Location 经 `catalogEntryId` 天然隔离，Catalog 按 Location 分文件持久化于 AppData cache。
+- 受控 Builder：构建在隔离子进程执行（hard timeout + kill），Forge Profile 指向随应用发行的已编译 worker resources；构建产物按源内容哈希存入不可变 build 目录，未变更工程直接命中 cache。
+- 构建（含 Reload）成功后写入 `.deshelf/` IDE declarations 与 schema，并幂等维护工程 `.gitignore`；这是对 Tool Project 的唯一写回。
+- 容器 realm 是独立 WebContents（sandbox + contextIsolation、无 Node），Main 进程只做一次性 MessagePort handoff，此后 Environment 流量在 Host renderer 与容器 renderer 之间点对点流转，不经 Main 逐消息转发；Restart/Close 由 realm manager 统一销毁，不泄漏 WebContents/ports。
+- Asset/Export 留在 Desktop environment adapter：文件对话框、字节缓存与写盘确认全在 Main；容器只见 opaque 的 `deshelf-cache://session-assets/<handle>` URL 与可序列化 export result，真实文件路径不进入 Tool Container。实现细节见 [`../for-framework-developers/desktop-adapter.md`](../for-framework-developers/desktop-adapter.md)。
+
+## 12. 当前迁移原则
 旧实现中的 `tool-registry.ts`、`metadata.json`、root master Svelte component、Tool-owned LeftPanel/RightPanel、Tool-owned source controller、同 realm Svelte contexts 与 runtime exporter registration 是待替换 implementation，不得继续深化。
 
 迁移以 Shallow Water 为唯一验证 Tool，并按下列独立工作流推进：

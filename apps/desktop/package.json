@@ -1,0 +1,24 @@
+{
+	"name": "@deshelf/desktop",
+	"private": true,
+	"version": "0.0.1",
+	"type": "module",
+	"description": "Deshelf Desktop: Open Project Forge + WebContents + MessagePort Tool Container adapter",
+	"scripts": {
+		"test": "bun test",
+		"typecheck": "tsc --noEmit -p tsconfig.json",
+		"app:dev": "electron ."
+	},
+	"dependencies": {
+		"tool-builder": "workspace:*",
+		"tool-contract": "workspace:*",
+		"tool-host": "workspace:*",
+		"tool-sdk": "workspace:*"
+	},
+	"devDependencies": {
+		"@types/bun": "^1.4.0",
+		"@types/node": "^22.10.2",
+		"electron": "^44.1.1",
+		"typescript": "^5.7.2"
+	}
+}

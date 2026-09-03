@@ -23,12 +23,12 @@
 
 ## 4. Desktop adapter（MAB-68）
 
-- [ ] 4.1 建立 Electron Main/Preload/Renderer 与 Open Project workflow。
-- [ ] 4.2 实现受控 Builder process、可部署 Forge Profile/worker resources 与 AppData cache。
-- [ ] 4.3 实现 Desktop Project Catalog 持久化/upsert、同 Project ID 多 Location，并生成 `.deshelf/` IDE declarations/schema。
-- [ ] 4.4 实现 Main/Slate WebContents + MessagePort transport。
-- [ ] 4.5 实现不暴露真实路径的 Asset/Export adapters。
-- [ ] 4.6 通过与 Web 相同的 conformance tests。
+- [x] 4.1 建立 Electron Main/Preload/Renderer 与 Open Project workflow（`apps/desktop`，projectLocationId 身份 + 目录对话框流程）。
+- [x] 4.2 实现受控 Builder process、可部署 Forge Profile/worker resources 与 AppData cache（内容寻址 build 目录、hard timeout 子进程、`forge-resources.json` 解析器）。
+- [x] 4.3 实现 Desktop Project Catalog 持久化/upsert、同 Project ID 多 Location，并生成 `.deshelf/` IDE declarations/schema（幂等 + `.gitignore` 维护）。
+- [x] 4.4 实现 Main/Slate WebContents + MessagePort transport（sandbox realm、一次性 port handoff、renderer↔renderer 流量、Restart 不泄漏 WebContents/ports）。
+- [x] 4.5 实现不暴露真实路径的 Asset/Export adapters（session 字节缓存 + `deshelf-cache://session-assets/<handle>`；export 经容器 realm 解析 blob 后写盘）。
+- [x] 4.6 通过与 Web 相同的 conformance tests（`apps/desktop/tests/conformance-desktop.test.ts` 复用 `tool-host/conformance`）。
 
 ## 5. Shallow Water migration（MAB-70）
 
