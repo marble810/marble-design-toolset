@@ -34,6 +34,20 @@ export type RuntimeStatus =
 	| { kind: 'ready'; resolution: number }
 	| { kind: 'error'; message: string };
 
+interface RuntimeRenderer {
+	setInitialHeight(data: Float32Array): void;
+	advanceFrames(frameCount: number, parameters: SimParameters): void;
+	render(parameters: SimParameters): void;
+	dispose(): void;
+}
+
+export interface ShallowWaterRuntimeDependencies {
+	loadHeightData(source: InitMapSource, parameters: SimParameters): Promise<Float32Array>;
+	createRenderer(canvas: HTMLCanvasElement, resolution: number): RuntimeRenderer;
+	requestFrame(callback: FrameRequestCallback): number;
+	cancelFrame(handle: number): void;
+}
+
 export interface ShallowWaterRuntime {
 	/** Creates the preview renderer on the canvas and starts the animation loop. */
 	attach(canvas: HTMLCanvasElement): void;
@@ -55,9 +69,19 @@ function assetToSource(content: AssetContent | null | undefined): InitMapSource 
 	return { kind: 'image', url: content.url };
 }
 
-export function createShallowWaterRuntime(context: ContainerSurfaceContext): ShallowWaterRuntime {
+export function createShallowWaterRuntime(
+	context: ContainerSurfaceContext,
+	overrides: Partial<ShallowWaterRuntimeDependencies> = {}
+): ShallowWaterRuntime {
+	const dependencies: ShallowWaterRuntimeDependencies = {
+		loadHeightData: loadInitMapHeightData,
+		createRenderer: (canvas, resolution) => new ShallowWaterWaveRenderer(canvas, resolution),
+		requestFrame: (callback) => requestAnimationFrame(callback),
+		cancelFrame: (handle) => cancelAnimationFrame(handle),
+		...overrides
+	};
 	let canvas: HTMLCanvasElement | null = null;
-	let renderer: ShallowWaterWaveRenderer | null = null;
+	let renderer: RuntimeRenderer | null = null;
 	let rendererResolution = 0;
 	let initialData: Float32Array | null = null;
 	let structuralKey = '';
@@ -120,6 +144,8 @@ export function createShallowWaterRuntime(context: ContainerSurfaceContext): Sha
 
 		const source = activeSource(values);
 		if (source === null) {
+			// Invalidate any decode started for the previous asset before publishing idle.
+			loadVersion += 1;
 			initialData = null;
 			structuralKey = '';
 			setStatus(IDLE_IMAGE_MODE);
@@ -134,7 +160,7 @@ export function createShallowWaterRuntime(context: ContainerSurfaceContext): Sha
 		if (renderer === null || rendererResolution !== sim.resolution) {
 			if (canvas !== null) {
 				renderer?.dispose();
-				renderer = new ShallowWaterWaveRenderer(canvas, sim.resolution);
+				renderer = dependencies.createRenderer(canvas, sim.resolution);
 				rendererResolution = sim.resolution;
 				canvas.width = sim.resolution;
 				canvas.height = sim.resolution;
@@ -146,7 +172,7 @@ export function createShallowWaterRuntime(context: ContainerSurfaceContext): Sha
 		const version = ++loadVersion;
 		setStatus({ kind: 'loading' });
 		try {
-			const heightData = await loadInitMapHeightData(source, sim);
+			const heightData = await dependencies.loadHeightData(source, sim);
 			if (disposed || version !== loadVersion || renderer === null) return;
 			initialData = heightData;
 			renderer.setInitialHeight(heightData);
@@ -166,7 +192,7 @@ export function createShallowWaterRuntime(context: ContainerSurfaceContext): Sha
 		const sim = readSimParameters(currentValues());
 		canvas.width = sim.resolution;
 		canvas.height = sim.resolution;
-		renderer = new ShallowWaterWaveRenderer(canvas, sim.resolution);
+		renderer = dependencies.createRenderer(canvas, sim.resolution);
 		rendererResolution = sim.resolution;
 		// Subscriptions may have synced before the canvas existed; force one re-seed now
 		// that the renderer can actually receive the initial height field.
@@ -174,14 +200,14 @@ export function createShallowWaterRuntime(context: ContainerSurfaceContext): Sha
 
 		const loop = () => {
 			if (disposed) return;
-			rafHandle = requestAnimationFrame(loop);
+			rafHandle = dependencies.requestFrame(loop);
 			if (renderer !== null && initialData !== null) {
 				const nextSim = readSimParameters(currentValues());
 				renderer.advanceFrames(1, nextSim);
 				renderer.render(nextSim);
 			}
 		};
-		rafHandle = requestAnimationFrame(loop);
+		rafHandle = dependencies.requestFrame(loop);
 
 		void sync();
 	}
@@ -203,7 +229,7 @@ export function createShallowWaterRuntime(context: ContainerSurfaceContext): Sha
 	function dispose(): void {
 		if (disposed) return;
 		disposed = true;
-		cancelAnimationFrame(rafHandle);
+		dependencies.cancelFrame(rafHandle);
 		parameterUnsubscribe();
 		assetUnsubscribe();
 		loadVersion += 1;

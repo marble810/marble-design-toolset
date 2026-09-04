@@ -11,7 +11,7 @@ import { defineInspectorCallback, defineVisualTool } from '@deshelf/tool-sdk';
 import { buildInspector } from './inspector.ts';
 import { PARAMETER_DEFINITIONS } from './parameters.ts';
 import { OUTPUT_DEFINITIONS } from './outputs.ts';
-import { bindSessionRuntime, getActiveSessionRuntime } from './sim/session.ts';
+import { bindSessionRuntime, requireActiveSessionRuntime } from './sim/session.ts';
 
 export default defineVisualTool({
 	parameters: PARAMETER_DEFINITIONS,
@@ -29,14 +29,14 @@ export default defineVisualTool({
 			run() {
 				// Re-seeds from the current init-map source (same action as the Inspector
 				// button, invocable from the Host command API).
-				getActiveSessionRuntime()?.resimulate();
+				requireActiveSessionRuntime().resimulate();
 			}
 		}
 	},
 	privateCallbacks: {
 		resimulate: defineInspectorCallback({
 			run() {
-				getActiveSessionRuntime()?.resimulate();
+				requireActiveSessionRuntime().resimulate();
 			}
 		})
 	},

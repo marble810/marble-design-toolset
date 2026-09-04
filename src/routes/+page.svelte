@@ -13,6 +13,7 @@
 	import { onMount } from 'svelte';
 	import type { CatalogEntry } from 'tool-contract';
 	import { StaticCatalogSource } from '$lib/forge/web/static-catalog-source.js';
+	import Button from '$lib/components/ui/button/Button.svelte';
 	import ForgeToolHost, { type ReloadSource } from '$lib/forge/components/ForgeToolHost.svelte';
 
 	const CATALOG_URL = '/deshelf/catalog.json';
@@ -67,7 +68,7 @@
 	<header class="forge-page__header">
 		<strong>Deshelf Web · Tool Host</strong>
 		<span class="forge-page__hint">same-origin iframe container · Catalog-driven</span>
-		<button type="button" class="forge-page__reload" onclick={loadCatalog}>Reload Catalog</button>
+		<Button class="forge-page__reload" variant="outline" size="sm" onclick={loadCatalog}>Reload Catalog</Button>
 	</header>
 
 	{#if loading}
@@ -84,15 +85,15 @@
 	{:else if activeEntry === undefined}
 		<div class="forge-page__list">
 			{#each entries as entry (entry.catalogEntryId)}
-				<button type="button" class="forge-page__entry" onclick={() => (activeEntry = entry)}>
+				<Button class="forge-page__entry" variant="outline" onclick={() => (activeEntry = entry)}>
 					<strong>{entry.name}</strong>
 					<span>{entry.slug} · v{entry.version} · {entry.libraries.length} lib(s) · slate: {entry.surfaces.slate ? 'yes' : 'no'}</span>
-				</button>
+				</Button>
 			{/each}
 		</div>
 	{:else}
 		<div class="forge-page__tool">
-			<button type="button" class="forge-page__back" onclick={() => (activeEntry = undefined)}>← Catalog</button>
+			<Button class="forge-page__back" variant="ghost" size="sm" onclick={() => (activeEntry = undefined)}>← Catalog</Button>
 			{#key catalogKey}
 				<ForgeToolHost
 					entry={activeEntry}
@@ -124,7 +125,7 @@
 		color: var(--color-fg-muted);
 		font-size: var(--font-size-2);
 	}
-	.forge-page__reload {
+	:global(.forge-page__reload) {
 		margin-left: auto;
 		height: 28px;
 		padding: 0 var(--space-3);
@@ -154,7 +155,7 @@
 		grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
 		gap: var(--space-3);
 	}
-	.forge-page__entry {
+	:global(.forge-page__entry) {
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-1);
@@ -166,10 +167,10 @@
 		text-align: left;
 		cursor: pointer;
 	}
-	.forge-page__entry:hover {
+	:global(.forge-page__entry:hover) {
 		border-color: var(--color-border-focus);
 	}
-	.forge-page__entry span {
+	:global(.forge-page__entry span) {
 		color: var(--color-fg-muted);
 		font-size: var(--font-size-1);
 	}
@@ -180,7 +181,7 @@
 		flex: 1;
 		min-height: 0;
 	}
-	.forge-page__back {
+	:global(.forge-page__back) {
 		align-self: flex-start;
 		height: 26px;
 		padding: 0 var(--space-3);

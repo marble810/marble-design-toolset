@@ -19,6 +19,7 @@ import { readProjectLocation } from '../src/main/project-location.ts';
 
 const PROJECT_ID = '3e5a1c9b-7d24-4f8e-9a31-b2c8d6e4f5a7';
 const BOOTSTRAP_ENTRY = path.resolve(import.meta.dir, '../src/container/bootstrap.ts');
+const SHALLOW_WATER_PROJECT = path.resolve(import.meta.dir, '../../../tools/shallow-water');
 
 const FIXTURE_INDEX = `import { defineVisualTool } from '@deshelf/tool-sdk';
 
@@ -141,6 +142,28 @@ describe('DesktopBuilderService (integration)', () => {
 		expect(third.entry?.catalogEntryId).toBe(first.entry?.catalogEntryId);
 		const mainArtifact = await fs.readFile(path.join(path.dirname(new URL(third.containerUrl ?? 'file://x/').pathname.replace(/^\//, '')), 'noop'), 'utf8').catch(() => null);
 		void mainArtifact;
+	}, 120_000);
+
+	test('the same Shallow Water project used by Web builds into the Desktop Catalog', async () => {
+		const cacheRoot = await makeCacheRoot();
+		const projectDir = await fs.mkdtemp(path.join(os.tmpdir(), 'deshelf-shallow-water-desktop-'));
+		await fs.cp(SHALLOW_WATER_PROJECT, projectDir, {
+			recursive: true,
+			filter: (source) => !source.includes(`${path.sep}.deshelf`)
+		});
+		const { service, catalog } = createService(cacheRoot, projectDir);
+		const location = await readProjectLocation(projectDir);
+		expect(location.ok).toBe(true);
+		if (!location.ok) return;
+
+		const outcome = await service.build(location.location);
+		expect(outcome.ok).toBe(true);
+		expect(outcome.entry?.slug).toBe('shallow-water');
+		expect(outcome.entry?.parameters.flowMagnitude?.mode).toBe('computed');
+		expect(outcome.entry?.outputs.simulationVideo?.kind).toBe('video');
+		expect((await catalog.listRecords()).map((record) => record.entry.projectId)).toEqual([
+			location.location.info.projectId
+		]);
 	}, 120_000);
 
 	test('a broken Tool Project never enters the usable Catalog', async () => {

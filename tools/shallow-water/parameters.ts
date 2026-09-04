@@ -126,6 +126,19 @@ export const PARAMETER_DEFINITIONS: Record<string, ParameterDefinition> = {
 		mode: 'manual',
 		constraint: { type: 'number', min: -1, max: 1, step: 0.01 }
 	},
+	flowMagnitude: {
+		type: 'number',
+		label: 'Flow Magnitude',
+		default: 0,
+		mode: 'computed',
+		dependsOn: ['flowX', 'flowY'],
+		constraint: { type: 'number', min: 0, max: Math.SQRT2, step: 0.01 },
+		compute(dependencies) {
+			const flowX = typeof dependencies.flowX === 'number' ? dependencies.flowX : 0;
+			const flowY = typeof dependencies.flowY === 'number' ? dependencies.flowY : 0;
+			return Math.min(Math.SQRT2, Math.hypot(flowX, flowY));
+		}
+	},
 	distortStrength: {
 		type: 'number',
 		label: 'Distort Strength',

@@ -11,6 +11,7 @@
 	 */
 	import { onMount } from 'svelte';
 	import type { CatalogEntry, Diagnostic } from 'tool-contract';
+	import Button from '$lib/components/ui/button/Button.svelte';
 	import { WebToolController, type WebToolExportResult } from '$lib/forge/web/web-tool-controller.js';
 	import ForgeInspector from './ForgeInspector.svelte';
 
@@ -170,13 +171,13 @@
 		<div class="forge-host__status" data-state={stateLabel}>
 			<span>{stateLabel}</span>
 			{#if showRestart}
-				<button type="button" class="forge-host__restart" data-action="restart" onclick={restart}>Restart Tool</button>
+				<Button class="forge-host__restart" variant="outline" size="sm" data-action="restart" onclick={restart}>Restart Tool</Button>
 			{/if}
 			{#if showReload}
-				<button type="button" class="forge-host__restart" data-action="reload" disabled={reloading} onclick={reload}>Reload</button>
+				<Button class="forge-host__restart" variant="outline" size="sm" data-action="reload" disabled={reloading} onclick={reload}>Reload</Button>
 			{/if}
 			{#if state === 'Ready'}
-				<button type="button" class="forge-host__restart" data-action="reset" onclick={resetDefaults}>Reset Defaults</button>
+				<Button class="forge-host__restart" variant="outline" size="sm" data-action="reset" onclick={resetDefaults}>Reset Defaults</Button>
 			{/if}
 		</div>
 	</header>
@@ -199,9 +200,9 @@
 			{#if Object.keys(entry.assets).length > 0}
 				<div class="forge-host__panel-title">Assets</div>
 				{#each Object.values(entry.assets) as asset (asset.id)}
-					<button type="button" class="forge-host__action" onclick={() => pickAsset(asset.id)}>
+					<Button class="forge-host__action" variant="outline" size="sm" onclick={() => pickAsset(asset.id)}>
 						Load {asset.label}
-					</button>
+					</Button>
 				{/each}
 				{#if assetMessage !== ''}
 					<div class="forge-host__note">{assetMessage}</div>
@@ -210,9 +211,9 @@
 			{#if Object.keys(entry.outputs).length > 0}
 				<div class="forge-host__panel-title">Export</div>
 				{#each Object.values(entry.outputs) as output (output.id)}
-					<button type="button" class="forge-host__action" disabled={state !== 'Ready'} onclick={() => exportOutput(output.id)}>
+					<Button class="forge-host__action" variant="outline" size="sm" disabled={state !== 'Ready'} onclick={() => exportOutput(output.id)}>
 						Export {output.label}
-					</button>
+					</Button>
 				{/each}
 				{#if exportMessage !== ''}
 					<div class="forge-host__note">{exportMessage}</div>
@@ -278,7 +279,7 @@
 		border-color: var(--color-border-soft);
 		color: var(--color-success);
 	}
-	.forge-host__restart {
+	:global(.forge-host__restart) {
 		height: 24px;
 		padding: 0 var(--space-3);
 		border: 1px solid var(--color-border-strong);
@@ -288,11 +289,11 @@
 		font-size: var(--font-size-1);
 		cursor: pointer;
 	}
-	.forge-host__restart:disabled {
+	:global(.forge-host__restart:disabled) {
 		opacity: 0.5;
 		cursor: default;
 	}
-	.forge-host__restart:hover {
+	:global(.forge-host__restart:hover) {
 		border-color: var(--color-border-focus);
 	}
 	.forge-host__body {
@@ -334,7 +335,7 @@
 		text-transform: uppercase;
 		color: var(--color-fg-muted);
 	}
-	.forge-host__action {
+	:global(.forge-host__action) {
 		height: 28px;
 		padding: 0 var(--space-3);
 		border: 1px solid var(--color-border-strong);
@@ -345,10 +346,10 @@
 		cursor: pointer;
 		text-align: left;
 	}
-	.forge-host__action:hover:not(:disabled) {
+	:global(.forge-host__action:hover:not(:disabled)) {
 		border-color: var(--color-border-focus);
 	}
-	.forge-host__action:disabled {
+	:global(.forge-host__action:disabled) {
 		opacity: 0.5;
 		cursor: default;
 	}

@@ -59,6 +59,7 @@ export function buildInspector({ root, parameters, privateCallbacks }: Inspector
 		section.slider({ id: 'waveSpeed', label: 'Wave Speed', bind: parameters.waveSpeed });
 		section.slider({ id: 'flowX', label: 'Flow X', bind: parameters.flowX });
 		section.slider({ id: 'flowY', label: 'Flow Y', bind: parameters.flowY });
+		section.slider({ id: 'flowMagnitude', label: 'Flow Magnitude', bind: parameters.flowMagnitude });
 		section.slider({ id: 'distortStrength', label: 'Distort Strength', bind: parameters.distortStrength });
 		section.slider({ id: 'distortScale', label: 'Distort Scale', bind: parameters.distortScale });
 		section.slider({ id: 'distortSpeed', label: 'Distort Speed', bind: parameters.distortSpeed });

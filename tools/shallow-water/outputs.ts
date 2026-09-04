@@ -6,7 +6,15 @@
  * outputs replay the deterministic simulation state owned by the Canvas session runtime
  * (see sim/session.ts) — the Canvas never registers an exporter at runtime.
  */
+import type { SimParameters } from './parameters.ts';
 import { requireActiveSessionRuntime } from './sim/session.ts';
+
+function requireExportInputs(): { sim: SimParameters; initialData: Float32Array } {
+	const runtime = requireActiveSessionRuntime();
+	const initialData = runtime.currentInitialData();
+	if (initialData === null) throw new Error('no init map loaded yet');
+	return { sim: runtime.currentSimParameters(), initialData };
+}
 
 export const OUTPUT_DEFINITIONS = {
 	heightMap: {
@@ -14,11 +22,9 @@ export const OUTPUT_DEFINITIONS = {
 		label: 'Height Map PNG',
 		mime: 'image/png',
 		async render(): Promise<Blob> {
-			const runtime = requireActiveSessionRuntime();
-			const initialData = runtime.currentInitialData();
-			if (initialData === null) throw new Error('no init map loaded yet');
+			const { sim, initialData } = requireExportInputs();
 			const { exportStillBlob } = await import('./sim/export-replay.ts');
-			return exportStillBlob(runtime.currentSimParameters(), initialData);
+			return exportStillBlob(sim, initialData);
 		}
 	},
 	simulationVideo: {
@@ -27,11 +33,9 @@ export const OUTPUT_DEFINITIONS = {
 		// Primary intent; the recorded Blob's own type (mp4 or webm fallback) wins.
 		mime: 'video/mp4',
 		async render(): Promise<Blob> {
-			const runtime = requireActiveSessionRuntime();
-			const initialData = runtime.currentInitialData();
-			if (initialData === null) throw new Error('no init map loaded yet');
+			const { sim, initialData } = requireExportInputs();
 			const { exportVideoBlob } = await import('./sim/export-replay.ts');
-			const { blob } = await exportVideoBlob(runtime.currentSimParameters(), initialData);
+			const { blob } = await exportVideoBlob(sim, initialData);
 			return blob;
 		}
 	}

@@ -233,7 +233,10 @@ export async function buildToolProject(input: BuildToolProjectInput): Promise<Bu
 				lib: {
 					entry: entryPath,
 					formats: ['es'],
-					fileName: () => 'main.js'
+					fileName: () => 'main.js',
+					// External Tool Projects intentionally have no package.json. Pinning the
+					// stylesheet name keeps Vite from trying to derive one from package metadata.
+					cssFileName: 'tool'
 				},
 				rollupOptions: {
 					// The Svelte runtime and the Manifest-declared Framework Libraries are

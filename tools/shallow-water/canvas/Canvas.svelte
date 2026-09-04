@@ -14,6 +14,10 @@
 
 	let canvasElement: HTMLCanvasElement | undefined = $state();
 	let status = $state<RuntimeStatus>({ kind: 'loading' });
+	let surface = $state(context.surface());
+	let surfaceWidth = $derived(`${Math.max(1, Math.round(surface.width))}px`);
+	let surfaceHeight = $derived(`${Math.max(1, Math.round(surface.height))}px`);
+	let canvasSize = $derived(`${Math.max(1, Math.round(Math.min(surface.width, surface.height)))}px`);
 
 	onMount(() => {
 		const runtime = createShallowWaterRuntime(context);
@@ -21,18 +25,22 @@
 		const detachStatus = runtime.subscribeStatus((next) => {
 			status = next;
 		});
+		const detachSurface = context.onSurface((next) => {
+			surface = next;
+		});
 		if (canvasElement !== undefined) runtime.attach(canvasElement);
 
 		return () => {
 			detachStatus();
+			detachSurface();
 			bindSessionRuntime(null);
 			runtime.dispose();
 		};
 	});
 </script>
 
-<div class="shallow-canvas">
-	<canvas class="shallow-canvas__surface" bind:this={canvasElement}></canvas>
+<div class="shallow-canvas" style:width={surfaceWidth} style:height={surfaceHeight}>
+	<canvas class="shallow-canvas__surface" style:width={canvasSize} style:height={canvasSize} bind:this={canvasElement}></canvas>
 
 	{#if status.kind === 'loading'}
 		<div class="shallow-canvas__overlay">Preparing height field...</div>
@@ -54,29 +62,24 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 100%;
-		height: 100%;
-		background: #05070b;
+		background: var(--shallow-water-canvas-bg, #05070b);
 	}
 
 	.shallow-canvas__surface {
-		max-width: 100%;
-		max-height: 100%;
-		aspect-ratio: 1 / 1;
 		image-rendering: pixelated;
 	}
 
 	.shallow-canvas__overlay {
 		position: absolute;
-		inset: 0;
+		inset: 0px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		padding: 20px;
-		background: rgba(5, 7, 11, 0.78);
+		background: var(--shallow-water-overlay-bg, rgba(5, 7, 11, 0.78));
 		color: var(--color-fg-secondary, #9aa4b2);
 		font-size: 13px;
-		line-height: 1.5;
+		line-height: 20px;
 		text-align: center;
 	}
 

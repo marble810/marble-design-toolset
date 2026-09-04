@@ -87,7 +87,8 @@ export async function exportStillBlob(sim: SimParameters, initialData: Float32Ar
 }
 
 interface ManualRecorder {
-	start(): void;
+	start(timeslice?: number): void;
+	requestData?(): void;
 	stop(): void;
 }
 
@@ -118,7 +119,9 @@ async function recordDeterministicFrames(
 		recorder.onerror = (event) => reject(new Error(`MediaRecorder failed: ${String((event as ErrorEvent).message ?? 'unknown error')}`));
 	});
 
-	recorder.start();
+	// A timeslice makes Chromium flush encoder chunks while recording; relying only on
+	// the final stop event can produce a zero-byte blob for manual canvas capture.
+	recorder.start(1000);
 	try {
 		const track = stream.getVideoTracks()[0] as (MediaStreamTrack & { requestFrame?: () => void }) | undefined;
 		const intervalMs = 1000 / fps;
@@ -140,7 +143,14 @@ async function recordDeterministicFrames(
 		throw err;
 	}
 
-	if (recorder.state !== 'inactive') recorder.stop();
+	if (recorder.state !== 'inactive') {
+		// Give the encoder one frame interval to consume the final requestFrame, then
+		// explicitly flush pending bytes before stopping.
+		await new Promise<void>((resolve) => setTimeout(resolve, 1000 / fps));
+		recorder.requestData?.();
+		await new Promise<void>((resolve) => setTimeout(resolve, 0));
+		recorder.stop();
+	}
 	await stopped;
 	stream.getTracks().forEach((track) => track.stop());
 	return new Blob(chunks, { type: picked.mime });
@@ -155,24 +165,33 @@ export async function exportVideoBlob(
 	initialData: Float32Array,
 	options: { fps: number; seconds: number } = { fps: VIDEO_EXPORT_FPS, seconds: VIDEO_EXPORT_SECONDS }
 ): Promise<{ blob: Blob; extension: 'mp4' | 'webm' }> {
-	const picked = pickRecorderMime();
-	if (picked === null) {
+	const supported = RECORDER_MIME_CANDIDATES.filter(isTypeSupported).map((mime) => ({
+		mime,
+		extension: extensionFor(mime)
+	})) satisfies PickedMime[];
+	if (supported.length === 0) {
 		throw new Error('No supported video MIME type for MediaRecorder in this browser');
 	}
 
-	const canvas = createOffscreenCanvas(sim.resolution);
-	const renderer = new ShallowWaterWaveRenderer(canvas, sim.resolution);
-	try {
-		renderer.setInitialHeight(initialData);
-		const totalFrames = Math.max(1, Math.round(options.fps * options.seconds));
-		const blob = await recordDeterministicFrames(canvas, picked, totalFrames, options.fps, async (frameIndex) => {
-			// Frame 0 is the initial state; every later frame advances exactly one
-			// logical frame so the replay matches the preview's deterministic stepping.
-			if (frameIndex > 0) renderer.advanceFrames(1, sim);
-			renderer.render(sim);
-		});
-		return { blob, extension: picked.extension };
-	} finally {
-		renderer.dispose();
+	const totalFrames = Math.max(1, Math.round(options.fps * options.seconds));
+	for (const picked of supported) {
+		const canvas = createOffscreenCanvas(sim.resolution);
+		const renderer = new ShallowWaterWaveRenderer(canvas, sim.resolution);
+		try {
+			renderer.setInitialHeight(initialData);
+			const blob = await recordDeterministicFrames(canvas, picked, totalFrames, options.fps, async (frameIndex) => {
+				// Frame 0 is the initial state; every later frame advances exactly one
+				// logical frame so the replay matches the preview's deterministic stepping.
+				if (frameIndex > 0) renderer.advanceFrames(1, sim);
+				renderer.render(sim);
+			});
+			// Chromium can advertise MP4 support while producing only zero-byte chunks
+			// for manual canvas capture. Fall through to WebM instead of exporting an
+			// apparently successful empty file.
+			if (blob.size > 0) return { blob, extension: picked.extension };
+		} finally {
+			renderer.dispose();
+		}
 	}
+	throw new Error('MediaRecorder produced no video bytes for any supported MIME type');
 }
