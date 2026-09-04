@@ -9,18 +9,18 @@
  * - Host UI window: contextIsolation, no Node integration, preload = preload-host.ts
  *   (typed bridge only).
  */
-import { app, BrowserWindow, dialog, ipcMain, MessageChannelMain, protocol, webContents, type MessagePortMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, MessageChannelMain, protocol, WebContentsView, type MessagePortMain } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createCachePaths, CACHE_PROTOCOL } from './paths.ts';
 import { DesktopBuilderService } from './builder-service.ts';
 import { DesktopCatalogService } from './catalog-service.ts';
 import { createDesktopBridge, BRIDGE_METHOD_TO_CHANNEL, disposeDesktopBridge } from './desktop-app.ts';
-import { createDevForgeProfileResolver } from './forge-resources.ts';
+import { createDeployedForgeProfileResolver, createDevForgeProfileResolver } from './forge-resources.ts';
 import { ToolRealmManager, type ContainerWebContents } from './realms.ts';
-import type { AssetFileDialog } from './asset-store.ts';
+import { SessionAssetStore, type AssetFileDialog } from './asset-store.ts';
 import type { SaveFileDialog } from './export-writer.ts';
-import { privilegedCacheScheme, resolveCacheUrl } from './resource-protocol.ts';
+import { privilegedCacheScheme, resolveCacheUrl, resolveSessionAssetUrl } from './resource-protocol.ts';
 import { InProcessBuildExecutor, ControlledBuildExecutor } from './controlled-build.ts';
 import { BRIDGE } from '../shared/bridge-protocol.ts';
 
@@ -30,36 +30,57 @@ protocol.registerSchemesAsPrivileged([privilegedCacheScheme()]);
 
 // The container bootstrap entry is bundled at packaging time; in this repository the
 // TS entry works directly (bun/node execute TS, dev only).
-const BOOTSTRAP_ENTRY = path.resolve(dirname, '../container/bootstrap.ts');
+const BOOTSTRAP_ENTRY = app.isPackaged
+	? path.join(process.resourcesPath, 'forge', 'container-bootstrap-entry.js')
+	: path.resolve(dirname, '../forge/container-bootstrap-entry.js');
 const CACHE_ROOT = path.join(app.getPath('userData'), 'deshelf-forge');
 const paths = createCachePaths(CACHE_ROOT);
 
 const catalog = new DesktopCatalogService(CACHE_ROOT);
+const assetStore = new SessionAssetStore();
+let hostWindow: BrowserWindow | undefined;
 // Deployed apps build in the controlled subprocess (hard timeout + kill); the in-process
 // executor is a development-mode convenience because `ELECTRON_RUN_AS_NODE` cannot run
 // the TS runner (packaging ships it as compiled JS).
 const buildExecutor = app.isPackaged
-	? new ControlledBuildExecutor({ runnerPath: path.join(dirname, 'controlled-build-runner.js') })
+	? new ControlledBuildExecutor({ runnerPath: path.join(process.resourcesPath, 'forge', 'controlled-build-runner.js') })
 	: new InProcessBuildExecutor();
 const builder = new DesktopBuilderService(CACHE_ROOT, {
 	executor: buildExecutor,
-	resolveForgeProfile: createDevForgeProfileResolver(),
+	resolveForgeProfile: app.isPackaged
+		? createDeployedForgeProfileResolver(process.resourcesPath)
+		: createDevForgeProfileResolver(),
 	bootstrapEntry: BOOTSTRAP_ENTRY,
 	catalog,
 	log: (message) => console.log(message)
 });
 const realms = new ToolRealmManager(
 	{
-		create: (options) => {
-			const create = (webContents as unknown as { create: (o: unknown) => ContainerWebContents }).create;
-			return create({
+		create: (options): ContainerWebContents => {
+			if (hostWindow === undefined) throw new Error('Host window is not ready');
+			const view = new WebContentsView({
 				webPreferences: {
 					sandbox: options.webPreferences.sandbox,
 					contextIsolation: options.webPreferences.contextIsolation,
 					nodeIntegration: options.webPreferences.nodeIntegration,
-					preload: path.join(dirname, 'preload-container.js')
+					preload: path.join(dirname, 'preload-container.cjs')
 				}
 			});
+			hostWindow.contentView.addChildView(view);
+			const contents = view.webContents;
+			return {
+				loadURL: (url) => contents.loadURL(url),
+				postMessage: (channel, message, transfer) => contents.postMessage(channel, message, transfer as MessagePortMain[]),
+				isDestroyed: () => contents.isDestroyed(),
+				destroy: () => {
+					try { hostWindow?.contentView.removeChildView(view); } catch { /* already detached */ }
+					if (!contents.isDestroyed()) contents.close({ waitForBeforeUnload: false });
+				},
+				on: (_event, listener) => contents.on('destroyed', listener),
+				executeJavaScript: (code) => contents.executeJavaScript(code),
+				getURL: () => contents.getURL(),
+				setBounds: (bounds) => view.setBounds(bounds)
+			};
 		}
 	},
 	{ create: () => new MessageChannelMain() },
@@ -71,6 +92,7 @@ const bridge = createDesktopBridge({
 	cacheRoot: CACHE_ROOT,
 	builder,
 	realms,
+	assetStore,
 	hostPortTarget: {
 		postMessage: (channel, message, transfer) => {
 			// The Host UI window is the single port-handoff target (tracked explicitly, not
@@ -86,8 +108,6 @@ for (const [method, handler] of Object.entries(bridge)) {
 	ipcMain.handle(channel, (_event, request: unknown) => (handler as (request: unknown) => unknown)(request));
 }
 
-let hostWindow: BrowserWindow | undefined;
-
 function createHostWindow(): BrowserWindow {
 	const window = new BrowserWindow({
 		width: 1440,
@@ -98,10 +118,10 @@ function createHostWindow(): BrowserWindow {
 			contextIsolation: true,
 			nodeIntegration: false,
 			sandbox: false, // the typed Host preload needs ipcRenderer.invoke via contextBridge
-			preload: path.join(dirname, 'preload-host.js')
+			preload: path.join(dirname, 'preload-host.cjs')
 		}
 	});
-	window.loadFile(path.join(dirname, '../../ui/index.html'));
+	window.loadFile(path.join(dirname, '../ui/index.html'));
 	window.once('ready-to-show', () => window.show());
 	hostWindow = window;
 	window.on('closed', () => {
@@ -112,6 +132,12 @@ function createHostWindow(): BrowserWindow {
 
 app.whenReady().then(() => {
 	protocol.handle(CACHE_PROTOCOL, async (request) => {
+		const sessionAsset = resolveSessionAssetUrl(assetStore, request.url);
+		if (sessionAsset !== undefined) {
+			return new Response(sessionAsset.bytes as unknown as BodyInit, {
+				headers: { 'content-type': sessionAsset.contentType }
+			});
+		}
 		const resolved = resolveCacheUrl(CACHE_ROOT, request.url);
 		if (resolved === undefined) return new Response('not found', { status: 404 });
 		try {

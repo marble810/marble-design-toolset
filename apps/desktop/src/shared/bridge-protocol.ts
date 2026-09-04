@@ -19,8 +19,10 @@ export const BRIDGE = {
 	listCatalog: 'deshelf:list-catalog',
 	/** Host renderer opens a Tool Session realm; the port is transferred separately. */
 	openToolSession: 'deshelf:open-tool-session',
-	/** Host renderer closes a Tool Session realm. */
+	/** Host renderer closes a Tool Session realm or one optional endpoint. */
 	closeToolSession: 'deshelf:close-tool-session',
+	/** Host renderer positions a visible Tool WebContentsView over its surface host. */
+	setToolSurfaceBounds: 'deshelf:set-tool-surface-bounds',
 	/** One-time WebContents.postMessage channel that transfers the renderer-side port. */
 	portHandoff: 'deshelf:port',
 	/** Host renderer asks Main to show the Asset Input file dialog. */
@@ -83,6 +85,13 @@ export interface CatalogListResult {
 	entries: CatalogEntry[];
 }
 
+export interface ToolSurfaceBounds {
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+}
+
 export interface OpenToolSessionRequest {
 	catalogEntryId: string;
 	/**
@@ -92,6 +101,7 @@ export interface OpenToolSessionRequest {
 	sessionId?: string;
 	/** Defaults to 'main' for new sessions; required when `sessionId` is set. */
 	endpoint?: 'main' | 'slate';
+	bounds: ToolSurfaceBounds;
 }
 
 export interface OpenToolSessionResult {
@@ -105,6 +115,14 @@ export interface OpenToolSessionResult {
 
 export interface CloseToolSessionRequest {
 	sessionId: string;
+	/** Omit to close the whole session; Slate failures close only the Slate realm. */
+	endpoint?: 'main' | 'slate';
+}
+
+export interface SetToolSurfaceBoundsRequest {
+	sessionId: string;
+	endpoint: 'main' | 'slate';
+	bounds: ToolSurfaceBounds;
 }
 
 export interface PortHandoffPayload {
@@ -131,7 +149,7 @@ export interface AssetUrlRequest {
 }
 
 export interface AssetUrlResult {
-	/** Container-fetchable URL under deshelf-cache://session-assets/<handle>. */
+	/** Container-fetchable URL under deshelf-cache://session-assets/<sessionId>/<handle>. */
 	url: string;
 	mime: string;
 }
@@ -161,6 +179,7 @@ export type BridgeHandlers = {
 	[BRIDGE.listCatalog]: () => Promise<CatalogListResult>;
 	[BRIDGE.openToolSession]: (request: OpenToolSessionRequest) => Promise<OpenToolSessionResult>;
 	[BRIDGE.closeToolSession]: (request: CloseToolSessionRequest) => Promise<{ ok: boolean }>;
+	[BRIDGE.setToolSurfaceBounds]: (request: SetToolSurfaceBoundsRequest) => Promise<{ ok: boolean }>;
 	[BRIDGE.assetPick]: (request: AssetPickRequest) => Promise<AssetPickResult>;
 	[BRIDGE.assetUrl]: (request: AssetUrlRequest) => Promise<AssetUrlResult>;
 	[BRIDGE.exportSave]: (request: ExportSaveRequest) => Promise<ExportSaveResult>;

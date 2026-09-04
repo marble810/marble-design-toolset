@@ -4,10 +4,12 @@
 	"version": "0.0.1",
 	"type": "module",
 	"description": "Deshelf Desktop: Open Project Forge + WebContents + MessagePort Tool Container adapter",
+	"main": "dist/main/electron-main.js",
 	"scripts": {
 		"test": "bun test",
 		"typecheck": "tsc --noEmit -p tsconfig.json",
-		"app:dev": "electron ."
+		"build": "bun ./scripts/build.ts",
+		"app:dev": "bun run build && electron ."
 	},
 	"dependencies": {
 		"tool-builder": "workspace:*",

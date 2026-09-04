@@ -21,6 +21,13 @@
 import { BRIDGE } from '../shared/bridge-protocol.ts';
 
 /** Structural subset of Electron's WebContents the realm manager relies on. */
+export interface RealmBounds {
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+}
+
 export interface ContainerWebContents {
 	loadURL(url: string): Promise<void>;
 	/** Transfers MessagePortMain objects into the renderer (one-time port handoff). */
@@ -30,6 +37,8 @@ export interface ContainerWebContents {
 	on(event: 'destroyed', listener: () => void): unknown;
 	executeJavaScript(code: string): Promise<unknown>;
 	getURL(): string;
+	/** Attaches/positions the visible child view in the Host window. */
+	setBounds(bounds: RealmBounds): void;
 }
 
 export interface WebContentsFactory {
@@ -93,6 +102,7 @@ export class ToolRealmManager {
 		endpoint: 'main' | 'slate';
 		/** Container page URL under the cache protocol (query carries entry + endpoint). */
 		containerUrl: string;
+		bounds: RealmBounds;
 	}): Promise<RealmHandle> {
 		const key = `${options.sessionId}::${options.endpoint}`;
 		if (this.realms.has(key)) {
@@ -109,10 +119,8 @@ export class ToolRealmManager {
 			}
 		});
 
+		webContents.setBounds(options.bounds);
 		const channel = this.channelFactory.create();
-		channel.port1.start();
-		// One-time handoff into the container realm. `port1` leaves the Main process here.
-		webContents.postMessage(BRIDGE.portHandoff, { endpoint: options.endpoint }, [channel.port1]);
 
 		const handle: RealmHandle = {
 			sessionId: options.sessionId,
@@ -133,13 +141,36 @@ export class ToolRealmManager {
 		});
 
 		try {
+			// Navigation must finish before the one-time transfer; otherwise the initial
+			// document receives the port and loses it when the container page replaces it.
 			await webContents.loadURL(options.containerUrl);
+			channel.port1.start();
+			webContents.postMessage(BRIDGE.portHandoff, { endpoint: options.endpoint }, [channel.port1]);
+			return handle;
 		} catch (err) {
-			// A failed load leaves the container page showing its own error box; the Host
-			// startup timeout drives the session to Failed with Restart available.
 			this.diagnostic('warning', 'realm/load-failed', `container page load failed: ${err instanceof Error ? err.message : String(err)}`, options.sessionId);
+			channel.port1.close();
+			channel.port2.close();
+			if (!webContents.isDestroyed()) webContents.destroy();
+			tracked.destroyed = true;
+			this.forget(key);
+			throw err;
 		}
-		return handle;
+	}
+
+	/** Destroys one endpoint without disturbing the other realm. Idempotent. */
+	closeRealm(sessionId: string, endpoint: 'main' | 'slate'): void {
+		const key = `${sessionId}::${endpoint}`;
+		const tracked = this.realms.get(key);
+		if (tracked === undefined) return;
+		tracked.handle.hostPort.close();
+		tracked.destroyed = true;
+		if (!tracked.handle.webContents.isDestroyed()) tracked.handle.webContents.destroy();
+		this.forget(key);
+	}
+
+	setBounds(sessionId: string, endpoint: 'main' | 'slate', bounds: RealmBounds): void {
+		this.realms.get(`${sessionId}::${endpoint}`)?.handle.webContents.setBounds(bounds);
 	}
 
 	/** Destroys every realm of a session (Restart, Reload, Close). Idempotent. */
@@ -147,10 +178,7 @@ export class ToolRealmManager {
 		for (const key of this.sessionRealms.get(sessionId) ?? []) {
 			const tracked = this.realms.get(key);
 			if (tracked === undefined) continue;
-			tracked.handle.hostPort.close();
-			if (!tracked.handle.webContents.isDestroyed()) tracked.handle.webContents.destroy();
-			tracked.destroyed = true;
-			this.forget(key);
+			this.closeRealm(sessionId, tracked.handle.endpoint);
 		}
 		this.sessionRealms.delete(sessionId);
 	}

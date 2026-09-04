@@ -5,8 +5,9 @@
 import { describe, expect, test } from 'bun:test';
 import os from 'node:os';
 import path from 'node:path';
+import { SessionAssetStore } from '../src/main/asset-store.ts';
 import { cacheUrlFor } from '../src/main/paths.ts';
-import { contentTypeFor, resolveCacheUrl } from '../src/main/resource-protocol.ts';
+import { contentTypeFor, resolveCacheUrl, resolveSessionAssetUrl } from '../src/main/resource-protocol.ts';
 
 const CACHE_ROOT = path.join(os.tmpdir(), 'deshelf-desktop-protocol-test');
 
@@ -33,8 +34,14 @@ describe('resolveCacheUrl', () => {
 		expect(resolveCacheUrl(CACHE_ROOT, 'not a url')).toBeUndefined();
 	});
 
-	test('session-assets host is handled by the asset store, not the filesystem', () => {
-		expect(resolveCacheUrl(CACHE_ROOT, 'deshelf-cache://session-assets/some-handle')).toBeUndefined();
+	test('session-assets host resolves bytes only for the owning session', () => {
+		const store = new SessionAssetStore();
+		const asset = store.store('session/a', { mime: 'image/png', bytes: new Uint8Array([1, 2, 3]) });
+		const url = store.urlFor(asset.handle) as string;
+		expect(resolveCacheUrl(CACHE_ROOT, url)).toBeUndefined();
+		expect(resolveSessionAssetUrl(store, url)).toEqual({ bytes: asset.bytes, contentType: 'image/png' });
+		expect(resolveSessionAssetUrl(store, `deshelf-cache://session-assets/wrong/${asset.handle}`)).toBeUndefined();
+		expect(resolveSessionAssetUrl(store, 'deshelf-cache://session-assets/missing')).toBeUndefined();
 	});
 
 	test('cacheUrlFor produces canonical URLs', () => {

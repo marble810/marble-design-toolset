@@ -30,3 +30,6 @@ vite.config.ts.timestamp-*
 
 # Generated Deshelf Web static Catalog (scripts/build-web-catalog.ts)
 /static/deshelf
+
+# Generated Desktop application bundles
+/apps/desktop/dist

@@ -8,6 +8,7 @@
  */
 import path from 'node:path';
 import { createCachePaths, CACHE_PROTOCOL } from './paths.ts';
+import type { SessionAssetStore } from './asset-store.ts';
 
 /** Privileged scheme registration (must run before `app.ready`). */
 export function privilegedCacheScheme(): { scheme: string; privileges: Record<string, boolean> } {
@@ -42,6 +43,37 @@ export function contentTypeFor(filePath: string): string {
 	return CONTENT_TYPES[path.extname(filePath).toLowerCase()] ?? 'application/octet-stream';
 }
 
+export interface ResolvedSessionAsset {
+	bytes: Uint8Array;
+	contentType: string;
+}
+
+/** Resolves an opaque session asset URL without exposing or probing filesystem paths. */
+export function resolveSessionAssetUrl(
+	store: SessionAssetStore,
+	rawUrl: string
+): ResolvedSessionAsset | undefined {
+	let url: URL;
+	try {
+		url = new URL(rawUrl);
+	} catch {
+		return undefined;
+	}
+	if (url.protocol !== `${CACHE_PROTOCOL}:` || url.host !== 'session-assets') return undefined;
+	const segments = url.pathname.replace(/^\/+/, '').split('/');
+	if (segments.length !== 2) return undefined;
+	const [encodedSessionId, handle] = segments;
+	let sessionId: string;
+	try {
+		sessionId = decodeURIComponent(encodedSessionId as string);
+	} catch {
+		return undefined;
+	}
+	const asset = store.get(handle as string);
+	if (asset === undefined || asset.sessionId !== sessionId) return undefined;
+	return { bytes: asset.bytes, contentType: asset.mime };
+}
+
 export interface ResolvedCacheUrl {
 	/** Absolute path under the cache root (Main-process only). */
 	absolutePath: string;
@@ -50,7 +82,7 @@ export interface ResolvedCacheUrl {
 
 /**
  * Maps a `deshelf-cache://<host>/<path>` URL onto the cache root. Path traversal
- * (`..`, encoded separators, absolute segments, session-assets host) is rejected with
+ * (`..`, encoded separators, absolute segments, non-build hosts) is rejected with
  * `undefined` — the protocol handler answers 404, never a filesystem probe.
  */
 export function resolveCacheUrl(cacheRoot: string, rawUrl: string): ResolvedCacheUrl | undefined {

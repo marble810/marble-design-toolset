@@ -29,7 +29,8 @@ import {
 	type OpenProjectResult,
 	type OpenToolSessionRequest,
 	type OpenToolSessionResult,
-	type ProjectLocationInfo
+	type ProjectLocationInfo,
+	type SetToolSurfaceBoundsRequest
 } from '../shared/bridge-protocol.ts';
 import { SessionAssetStore, pickAsset, type AssetFileDialog } from './asset-store.ts';
 import type { SaveFileDialog } from './export-writer.ts';
@@ -50,6 +51,8 @@ export interface DesktopAppDeps {
 	realms: ToolRealmManager;
 	/** Where the Host UI renderer lives (port handoff target). */
 	hostPortTarget: HostPortTarget;
+	/** Shared with the cache protocol handler so opaque asset URLs resolve to bytes. */
+	assetStore?: SessionAssetStore;
 	/** Resolves container-owned blob: URLs into data: URLs (executeJavaScript realm). */
 	resolveContainerBlob?: (blobUrl: string) => Promise<string>;
 }
@@ -61,6 +64,7 @@ export interface DesktopBridgeHandlers {
 	listCatalog(): Promise<CatalogListResult>;
 	openToolSession(request: OpenToolSessionRequest): Promise<OpenToolSessionResult>;
 	closeToolSession(request: CloseToolSessionRequest): Promise<{ ok: boolean }>;
+	setToolSurfaceBounds(request: SetToolSurfaceBoundsRequest): Promise<{ ok: boolean }>;
 	assetPick(request: AssetPickRequest & { kind?: string }): Promise<AssetPickResult>;
 	assetUrl(request: AssetUrlRequest): Promise<AssetUrlResult>;
 	exportSave(request: ExportSaveRequest): Promise<ExportSaveResult>;
@@ -73,6 +77,7 @@ export const BRIDGE_METHOD_TO_CHANNEL: Readonly<Record<keyof DesktopBridgeHandle
 	listCatalog: BRIDGE.listCatalog,
 	openToolSession: BRIDGE.openToolSession,
 	closeToolSession: BRIDGE.closeToolSession,
+	setToolSurfaceBounds: BRIDGE.setToolSurfaceBounds,
 	assetPick: BRIDGE.assetPick,
 	assetUrl: BRIDGE.assetUrl,
 	exportSave: BRIDGE.exportSave
@@ -94,7 +99,7 @@ function toolInfos(entries: readonly { entry: { catalogEntryId: string; projectI
 
 /** Creates the full bridge handler map. Callers register each handler under its channel. */
 export function createDesktopBridge(deps: DesktopAppDeps): DesktopBridgeHandlers {
-	const assets = new SessionAssetStore();
+	const assets = deps.assetStore ?? new SessionAssetStore();
 	const lastLocation = new Map<string, ProjectLocation>();
 
 	async function loadLocation(projectLocationId: string): Promise<ProjectLocation | undefined> {
@@ -155,7 +160,7 @@ export function createDesktopBridge(deps: DesktopAppDeps): DesktopBridgeHandlers
 			const containerUrl = deps.builder.containerUrlFor(locationId, sourceHash);
 			const pageUrl = deps.builder.containerPageUrl(containerUrl, record.entry.artifacts.main, endpoint);
 
-			const realm = await deps.realms.openRealm({ sessionId, endpoint, containerUrl: pageUrl });
+			const realm = await deps.realms.openRealm({ sessionId, endpoint, containerUrl: pageUrl, bounds: request.bounds });
 			// One-time handoff of the Host-side port end into the Host UI renderer. All
 			// subsequent Environment traffic flows over the port pair, never via IPC.
 			deps.hostPortTarget.postMessage(BRIDGE.portHandoff, { sessionId, endpoint }, [realm.hostPort]);
@@ -164,7 +169,9 @@ export function createDesktopBridge(deps: DesktopAppDeps): DesktopBridgeHandlers
 				[endpoint]: deps.builder.containerPageUrl(containerUrl, record.entry.artifacts.main, endpoint)
 			};
 			if (endpoint === 'main' && record.entry.surfaces.slate) {
-				containerUrls.slate = deps.builder.containerPageUrl(containerUrl, record.entry.artifacts.slate ?? record.entry.artifacts.main, 'slate');
+				// The Slate realm imports the complete Main Tool Entry, whose dynamic slate()
+				// loader consumes the separately emitted Slate component chunk.
+				containerUrls.slate = deps.builder.containerPageUrl(containerUrl, record.entry.artifacts.main, 'slate');
 			}
 			return {
 				sessionId,
@@ -174,9 +181,18 @@ export function createDesktopBridge(deps: DesktopAppDeps): DesktopBridgeHandlers
 			};
 		},
 
-		async closeToolSession({ sessionId }): Promise<{ ok: boolean }> {
-			deps.realms.closeSession(sessionId);
-			assets.releaseSession(sessionId);
+		async closeToolSession({ sessionId, endpoint }): Promise<{ ok: boolean }> {
+			if (endpoint !== undefined) {
+				deps.realms.closeRealm(sessionId, endpoint);
+			} else {
+				deps.realms.closeSession(sessionId);
+				assets.releaseSession(sessionId);
+			}
+			return { ok: true };
+		},
+
+		async setToolSurfaceBounds({ sessionId, endpoint, bounds }): Promise<{ ok: boolean }> {
+			deps.realms.setBounds(sessionId, endpoint, bounds);
 			return { ok: true };
 		},
 

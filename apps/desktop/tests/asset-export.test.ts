@@ -16,7 +16,7 @@ describe('SessionAssetStore', () => {
 		store.store('s2', { mime: 'image/png', bytes: new Uint8Array([4]) });
 
 		expect(a.handle).toMatch(/[0-9a-f-]{36}/);
-		expect(store.urlFor(a.handle)).toBe(`deshelf-cache://session-assets/${a.handle}`);
+		expect(store.urlFor(a.handle)).toBe(`deshelf-cache://session-assets/s1/${a.handle}`);
 		expect(store.urlFor('missing')).toBeUndefined();
 		expect(store.size).toBe(2);
 

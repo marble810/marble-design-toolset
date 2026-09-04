@@ -3,7 +3,7 @@
  *
  * The Host chrome asks Main to show the platform file dialog; Main reads the picked
  * file ONCE and keeps the bytes in a session-scoped memory store. The Tool Container
- * receives only `{ kind: 'blob-url', url: 'deshelf-cache://session-assets/<handle>' }`:
+ * receives only `{ kind: 'blob-url', url: 'deshelf-cache://session-assets/<sessionId>/<handle>' }`:
  * an opaque, container-fetchable URL served by the cache protocol handler. Real
  * filesystem paths never cross the seam — neither in the Environment API payloads nor
  * anywhere in the container realm.
@@ -55,7 +55,10 @@ export class SessionAssetStore {
 
 	/** Container-fetchable URL for an asset handle (opaque; no filesystem path). */
 	urlFor(handle: string): string | undefined {
-		return this.assets.has(handle) ? `deshelf-cache://session-assets/${handle}` : undefined;
+		const asset = this.assets.get(handle);
+		return asset !== undefined
+			? `deshelf-cache://session-assets/${encodeURIComponent(asset.sessionId)}/${handle}`
+			: undefined;
 	}
 
 	mimeFor(handle: string): string | undefined {

@@ -8,6 +8,8 @@
  */
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import { BRIDGE } from '../shared/bridge-protocol.ts';
+import { createPreloadPortFacade } from '../transport/preload-port-facade.ts';
+import type { PortLike } from '../transport/port-transport.ts';
 
 contextBridge.exposeInMainWorld('DeshelfHost', {
 	openProject: () => ipcRenderer.invoke(BRIDGE.openProject),
@@ -15,14 +17,16 @@ contextBridge.exposeInMainWorld('DeshelfHost', {
 	listCatalog: () => ipcRenderer.invoke(BRIDGE.listCatalog),
 	openToolSession: (request: { catalogEntryId: string; sessionId?: string; endpoint?: 'main' | 'slate' }) =>
 		ipcRenderer.invoke(BRIDGE.openToolSession, request),
-	closeToolSession: (request: { sessionId: string }) => ipcRenderer.invoke(BRIDGE.closeToolSession, request),
+	closeToolSession: (request: { sessionId: string; endpoint?: 'main' | 'slate' }) => ipcRenderer.invoke(BRIDGE.closeToolSession, request),
+	setToolSurfaceBounds: (request: { sessionId: string; endpoint: 'main' | 'slate'; bounds: { x: number; y: number; width: number; height: number } }) =>
+		ipcRenderer.invoke(BRIDGE.setToolSurfaceBounds, request),
 	pickAsset: (request: { sessionId: string; title: string }) => ipcRenderer.invoke(BRIDGE.assetPick, request),
 	assetUrl: (request: { sessionId: string; handle: string }) => ipcRenderer.invoke(BRIDGE.assetUrl, request),
 	exportSave: (request: unknown) => ipcRenderer.invoke(BRIDGE.exportSave, request),
-	onPortHandoff: (handler: (payload: { sessionId: string; endpoint: 'main' | 'slate' }, port: MessagePort) => void): (() => void) => {
+	onPortHandoff: (handler: (payload: { sessionId: string; endpoint: 'main' | 'slate' }, port: PortLike) => void): (() => void) => {
 		const listener = (event: IpcRendererEvent, payload: { sessionId: string; endpoint: 'main' | 'slate' }): void => {
 			const [port] = event.ports;
-			if (port !== undefined) handler(payload, port);
+			if (port !== undefined) handler(payload, createPreloadPortFacade(port));
 		};
 		ipcRenderer.on(BRIDGE.portHandoff, listener);
 		return () => ipcRenderer.off(BRIDGE.portHandoff, listener);

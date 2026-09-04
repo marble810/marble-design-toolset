@@ -28,16 +28,18 @@ import type {
 	ExportSaveResult,
 	OpenToolSessionRequest,
 	OpenToolSessionResult,
-	PortHandoffPayload
+	PortHandoffPayload,
+	ToolSurfaceBounds
 } from '../shared/bridge-protocol.ts';
 import { createPortTransport, type PortLike } from '../transport/port-transport.ts';
 
 /** Structural view of the preload-exposed Desktop bridge (Host UI renderer side). */
 export interface DesktopHostBridge {
 	openToolSession(request: OpenToolSessionRequest): Promise<OpenToolSessionResult>;
-	closeToolSession(request: { sessionId: string }): Promise<{ ok: boolean }>;
+	closeToolSession(request: { sessionId: string; endpoint?: 'main' | 'slate' }): Promise<{ ok: boolean }>;
+	setToolSurfaceBounds(request: { sessionId: string; endpoint: 'main' | 'slate'; bounds: ToolSurfaceBounds }): Promise<{ ok: boolean }>;
 	/** Registers the one-time port handoff listener; returns an unsubscribe. */
-	onPortHandoff(handler: (payload: PortHandoffPayload, port: MessagePort) => void): () => void;
+	onPortHandoff(handler: (payload: PortHandoffPayload, port: PortLike) => void): () => void;
 	pickAsset(request: AssetPickRequest): Promise<AssetPickResult>;
 	assetUrl(request: AssetUrlRequest): Promise<AssetUrlResult>;
 	exportSave(request: ExportSaveRequest): Promise<ExportSaveResult>;
@@ -68,12 +70,7 @@ export interface DesktopToolExportResult {
 	saved?: { ok: boolean; canceled?: boolean; error?: string };
 }
 
-interface SurfaceSize {
-	width: number;
-	height: number;
-}
-
-const FALLBACK_SURFACE: SurfaceSize = { width: 640, height: 360 };
+const FALLBACK_SURFACE = { width: 640, height: 360 };
 
 export class DesktopToolController {
 	readonly session: ToolSession;
@@ -87,7 +84,7 @@ export class DesktopToolController {
 	private readonly detachResize: Array<() => void> = [];
 	private readonly onStateChange?: (state: ToolSessionState) => void;
 	private readonly onDiagnostic?: (diagnostic: Diagnostic) => void;
-	private readonly pendingPorts = new Map<string, { endpoint: 'main' | 'slate'; port: MessagePort }>();
+	private readonly pendingPorts = new Map<string, { endpoint: 'main' | 'slate'; port: PortLike }>();
 	private readonly unsubscribeHandoff: () => void;
 	private sessionId: string | undefined;
 	private inventory: OpenToolSessionResult['inventory'] = { assets: [], exports: [] };
@@ -134,7 +131,11 @@ export class DesktopToolController {
 	async open(): Promise<void> {
 		if (this.closed) throw new Error('desktop-tool-controller: controller is closed');
 		if (this.sessionId !== undefined) throw new Error('desktop-tool-controller: session already open');
-		const opened = await this.bridge.openToolSession({ catalogEntryId: this.entry.catalogEntryId, endpoint: 'main' });
+		const opened = await this.bridge.openToolSession({
+			catalogEntryId: this.entry.catalogEntryId,
+			endpoint: 'main',
+			bounds: this.measure(this.canvasHost)
+		});
 		try {
 			await this.adoptSession(opened, { mode: 'boot' });
 		} catch (err) {
@@ -153,7 +154,11 @@ export class DesktopToolController {
 		if (this.closed) throw new Error('desktop-tool-controller: controller is closed');
 		if (this.sessionId === undefined) throw new Error('desktop-tool-controller: session not open');
 		const previousSessionId = this.sessionId;
-		const opened = await this.bridge.openToolSession({ catalogEntryId: this.entry.catalogEntryId, endpoint: 'main' });
+		const opened = await this.bridge.openToolSession({
+			catalogEntryId: this.entry.catalogEntryId,
+			endpoint: 'main',
+			bounds: this.measure(this.canvasHost)
+		});
 		try {
 			await this.adoptSession(opened, { mode: 'restart' });
 		} catch (err) {
@@ -162,6 +167,11 @@ export class DesktopToolController {
 			throw err;
 		}
 		this.slateBooted = false;
+		// Desktop asset URLs are owned by the old Main-process session. Clear the fresh
+		// Session snapshot before releasing those bytes so no stale opaque URL survives.
+		for (const assetId of Object.keys(this.entry.assets)) {
+			this.session.setAsset(assetId, { kind: 'empty' });
+		}
 		// Destroy the old realms in Main; the session already sent surface.dispose.
 		await this.bridge.closeToolSession({ sessionId: previousSessionId });
 	}
@@ -235,7 +245,7 @@ export class DesktopToolController {
 		this.inventory = opened.inventory;
 		this.observeSurface(this.canvasHost, 'main');
 		const bootOptions = {
-			main: createPortTransport(port as unknown as PortLike),
+			main: createPortTransport(port),
 			surface: { kind: 'canvas' as const, ...surface },
 			inventory: this.inventory,
 			// Pin the Main-issued realm id so session filtering and realm tracking agree.
@@ -248,7 +258,7 @@ export class DesktopToolController {
 		}
 	}
 
-	private waitForPort(sessionId: string, endpoint: 'main' | 'slate'): Promise<MessagePort> {
+	private waitForPort(sessionId: string, endpoint: 'main' | 'slate'): Promise<PortLike> {
 		const pending = this.pendingPorts.get(sessionId);
 		if (pending !== undefined && pending.endpoint === endpoint) {
 			this.pendingPorts.delete(sessionId);
@@ -282,16 +292,17 @@ export class DesktopToolController {
 			const opened = await this.bridge.openToolSession({
 				catalogEntryId: this.entry.catalogEntryId,
 				sessionId: this.sessionId,
-				endpoint: 'slate'
+				endpoint: 'slate',
+				bounds: this.measure(this.slateHost)
 			});
 			try {
 				const port = await this.waitForPort(opened.sessionId, 'slate');
 				const surface = this.measure(this.slateHost);
 				this.observeSurface(this.slateHost, 'slate');
-				this.session.bootSlate({ transport: createPortTransport(port as unknown as PortLike), surface: { kind: 'slate', ...surface } });
+				this.session.bootSlate({ transport: createPortTransport(port), surface: { kind: 'slate', ...surface } });
 			} catch (err) {
-				// A failed Slate boot must not leak the Slate realm.
-				await this.bridge.closeToolSession({ sessionId: opened.sessionId }).catch(() => {});
+				// A failed Slate boot must not tear down the healthy Main Canvas realm.
+				await this.bridge.closeToolSession({ sessionId: opened.sessionId, endpoint: 'slate' }).catch(() => {});
 				this.slateBooted = false;
 				throw err;
 			}
@@ -305,15 +316,24 @@ export class DesktopToolController {
 		this.detachResize.push(
 			this.createResizeObserver(element, (size) => {
 				this.session.resizeSurface(role, size);
+				if (this.sessionId !== undefined) {
+					void this.bridge.setToolSurfaceBounds({
+						sessionId: this.sessionId,
+						endpoint: role,
+						bounds: this.measure(element)
+					});
+				}
 			})
 		);
 	}
 
-	private measure(element: HTMLElement): SurfaceSize {
+	private measure(element: HTMLElement): ToolSurfaceBounds {
 		const rect = element.getBoundingClientRect();
 		const width = Math.round(rect.width);
 		const height = Math.round(rect.height);
 		return {
+			x: Math.max(0, Math.round(rect.left)),
+			y: Math.max(0, Math.round(rect.top)),
 			width: width > 0 ? width : FALLBACK_SURFACE.width,
 			height: height > 0 ? height : FALLBACK_SURFACE.height
 		};

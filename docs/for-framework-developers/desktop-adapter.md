@@ -76,21 +76,21 @@ apps/desktop/
 
 ## 6. WebContents + MessagePort transport
 
-- 每 Session（每 endpoint）一个 realm：`webContents.create` + `MessageChannelMain`。
-- Main 只做**一次性 handoff**：`port1` 经 `webContents.postMessage('deshelf:port', payload, [port1])` 转移进容器 realm，`port2` 转移进 Host UI renderer。此后全部 Environment 流量在两个 renderer 之间走 MessagePort，**Main 不做逐消息转发**（无 per-message invoke）。
+- 每 Session（每 endpoint）一个 realm：附着到 Host Window 的 `WebContentsView` + `MessageChannelMain`。Host renderer 把 Canvas/Slate 容器的矩形通过固定 bridge 发给 Main，Main 负责初始定位及 ResizeObserver 后续 bounds 同步。
+- Main 等待目标 container page 完成导航后才做**一次性 handoff**：`port1` 经 `webContents.postMessage('deshelf:port', payload, [port1])` 转移进容器 realm，`port2` 转移进 Host UI renderer。此后全部 Environment 流量在两个 renderer 之间走 MessagePort，**Main 不做逐消息转发**（无 per-message invoke）。
 - Container realm webPreferences 强制 `sandbox: true, contextIsolation: true, nodeIntegration: false`；容器 preload 只暴露 `DeshelfContainer.onPort`（接收转移的 port），没有 Node、没有任意 ipcRenderer、没有 invoke 通道。Host renderer preload 同样只逐个暴露固定 bridge 函数。
 - Restart：controller 先 open 新 realm 并 adopt transport，`session.restart({ sessionId: <Main 签发的 id> })`（tool-host 的 `BootOptions.sessionId` 允许 Desktop 钉住 Main 签发的 id），随后 Main `closeSession(old)` 销毁旧 realm。Realm manager 按 sessionId 跟踪全部 WebContents/ports：close 幂等、外部 destroy 上报并 forget，不泄漏 WebContents 或 MessagePort。
-- Slate：Main Ready 后按需打开第二个 realm，不阻塞 Canvas Ready。
+- Slate：Main Ready 后按需打开第二个 realm，不阻塞 Canvas Ready；Slate 加载或 port adoption 失败时只销毁 Slate realm，保留 Main Canvas。
 
 ## 7. `deshelf-cache://` 协议
 
 - standard + secure + supportFetchAPI + stream，在 `app.ready` 前注册。
-- 只有 `deshelf-cache://builds/<locId>/<hash>/<path>` 一个文件命名空间；解析是唯一 URL → 路径映射点，拒绝 `..`/反斜杠/空段/未知 host，并做 cache-root 前缀二次校验。
-- `deshelf-cache://session-assets/<handle>` 由 `SessionAssetStore` 提供（内存字节，不在文件系统布局内）。
+- `deshelf-cache://builds/<locId>/<hash>/<path>` 是只读文件命名空间；解析是唯一 URL → 路径映射点，拒绝 `..`/反斜杠/空段/未知 host，并做 cache-root 前缀二次校验。
+- `deshelf-cache://session-assets/<sessionId>/<handle>` 由同一个 `SessionAssetStore` 和 protocol handler 解析；会核对 handle 的 Session 所有权，字节只存在于 Main 内存，不进入文件系统布局。
 
 ## 8. Asset Input 与 Visual Output（路径不进 Tool Container）
 
-- **Asset Input**：文件对话框在 Main；字节一次读入 Main 的 session-scoped 内存（session 关闭即释放）。容器拿到的 AssetContent 是 `{ kind: 'blob-url', url: 'deshelf-cache://session-assets/<handle>', mime }` —— opaque URL，容器可 fetch，但永远见不到真实文件路径，字节也不在 envelope 里传输。
+- **Asset Input**：文件对话框在 Main；字节一次读入 Main 的 session-scoped 内存（session 关闭即释放）。容器拿到的 AssetContent 是 `{ kind: 'blob-url', url: 'deshelf-cache://session-assets/<sessionId>/<handle>', mime }` —— opaque URL，容器可 fetch，但永远见不到真实文件路径，字节也不在 envelope 里传输。
 - **Visual Output**：容器内 render，`export.result` 仍是可序列化内容。若内容是容器 realm 的 `blob:` URL，Main 通过容器 realm 自身 `executeJavaScript(fetch → FileReader.readAsDataURL)` 在容器 origin 内解析成 data URL，再弹 save dialog 写盘。真实路径只存在于 Main 进程。
 
 ## 9. Conformance 与测试
@@ -102,7 +102,8 @@ apps/desktop/
 
 ```bash
 bun install
-bun run --cwd apps/desktop app:dev   # electron .（需要本地可用的 Electron 二进制）
+bun run --cwd apps/desktop build     # 生成 dist/main、dist/ui 与 dist/forge 可部署资源
+bun run --cwd apps/desktop app:dev   # 先 build，再执行 electron .（需要本地可用的 Electron 二进制）
 bun test                             # 全部测试（含 Desktop conformance）
 ```
 
@@ -110,6 +111,6 @@ bun test                             # 全部测试（含 Desktop conformance）
 
 打包发布时（packaging step）：
 
-1. 用 esbuild/bundle 将 `apps/desktop/src/main/*` 编译为 CJS/ESM JS；`build-supplies.ts` 与容器 bootstrap 一并编译，运行期不引用仓库源码路径；
-2. 编译 extraction worker（`packages/tool-builder/src/worker/extraction-runner.ts`）与 tool-sdk/tool-contract 入口为 JS，放入 `resources/forge/compiled/`，写 `forge-resources.json`；
-3. 打包 `apps/desktop` 的 preload/main/ui 与 `forge/` 资源目录。
+1. `apps/desktop/scripts/build.ts` 编译 Main、两个 preload、Host UI、container bootstrap 与 controlled runner；
+2. 同一脚本编译 extraction worker 与 tool-sdk/tool-contract 入口，生成 `dist/forge/forge-resources.json`；
+3. 打包器将 `dist/forge/` 复制到 `process.resourcesPath/forge/`。packaged Main 使用 `createDeployedForgeProfileResolver(process.resourcesPath)`，不再解析 monorepo source path。

@@ -6,6 +6,7 @@
 import { describe, expect, test } from 'bun:test';
 import { createEnvironmentEnvelope, type EnvironmentEnvelope } from 'tool-contract';
 import { createPortTransport } from '../src/transport/port-transport.ts';
+import { createPreloadPortFacade, type PreloadMessagePort } from '../src/transport/preload-port-facade.ts';
 import { drainPorts, FakeMessageChannelMain, FakeRendererPort, transferToRenderer, type MessageListener } from './fakes/ports.ts';
 
 function bootEnvelope(sessionId = 's1'): EnvironmentEnvelope {
@@ -23,6 +24,36 @@ function bootEnvelope(sessionId = 's1'): EnvironmentEnvelope {
 		}
 	});
 }
+
+describe('createPreloadPortFacade', () => {
+	test('exposes plain transport methods and forwards only cloneable message data', () => {
+		const nativeListeners = new Set<(event: { data: unknown }) => void>();
+		let posted: unknown;
+		let started = false;
+		let closed = false;
+		const native: PreloadMessagePort = {
+			postMessage: (message) => { posted = message; },
+			start: () => { started = true; },
+			close: () => { closed = true; },
+			addEventListener: (_type, listener) => { nativeListeners.add(listener); },
+			removeEventListener: (_type, listener) => { nativeListeners.delete(listener); }
+		};
+		const facade = createPreloadPortFacade(native);
+		const seen: unknown[] = [];
+		const listener = (event: { data: unknown }): void => { seen.push(event.data); };
+		facade.addEventListener('message', listener);
+		facade.start();
+		facade.postMessage({ ping: true });
+		for (const emit of nativeListeners) emit({ data: { pong: true } });
+		expect(started).toBe(true);
+		expect(posted).toEqual({ ping: true });
+		expect(seen).toEqual([{ pong: true }]);
+		facade.removeEventListener('message', listener);
+		expect(nativeListeners.size).toBe(0);
+		facade.close();
+		expect(closed).toBe(true);
+	});
+});
 
 describe('createPortTransport', () => {
 	test('delivers both directions after the one-time handoff', async () => {

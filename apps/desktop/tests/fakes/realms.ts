@@ -2,7 +2,7 @@
  * Fakes for the WebContents surface used by realm lifecycle tests.
  * Mirrors the structural contract of Electron WebContents the realm manager relies on.
  */
-import type { ContainerWebContents } from '../../src/main/realms.ts';
+import type { ContainerWebContents, RealmBounds } from '../../src/main/realms.ts';
 
 export class FakeWebContents implements ContainerWebContents {
 	readonly webPreferences: Record<string, unknown>;
@@ -10,6 +10,8 @@ export class FakeWebContents implements ContainerWebContents {
 	destroyed = false;
 	postedMessages: Array<{ channel: string; message: unknown; transfer?: unknown[] }> = [];
 	executedScripts: string[] = [];
+	bounds: RealmBounds | undefined;
+	events: string[] = [];
 	private readonly destroyedListeners = new Set<() => void>();
 
 	constructor(webPreferences: Record<string, unknown>) {
@@ -19,11 +21,13 @@ export class FakeWebContents implements ContainerWebContents {
 	async loadURL(url: string): Promise<void> {
 		if (this.destroyed) throw new Error('web contents destroyed');
 		this.url = url;
+		this.events.push('load');
 	}
 
 	postMessage(channel: string, message?: unknown, transfer?: unknown[]): void {
 		if (this.destroyed) throw new Error('web contents destroyed');
 		this.postedMessages.push({ channel, message, transfer });
+		this.events.push('postMessage');
 	}
 
 	isDestroyed(): boolean {
@@ -49,6 +53,10 @@ export class FakeWebContents implements ContainerWebContents {
 
 	getURL(): string {
 		return this.url;
+	}
+
+	setBounds(bounds: RealmBounds): void {
+		this.bounds = { ...bounds };
 	}
 
 	/** Test hook: simulate an external (crash) destroy. */

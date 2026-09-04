@@ -17,11 +17,11 @@
  * a looping tool wedges only this WebContents, and Restart destroys the realm in Main.
  */
 import { startToolContainer, type ContainerSurfaceContext, type ToolContainerRuntimeHandle, type VisualToolDefinition } from 'tool-sdk';
-import { createPortTransport } from '../transport/port-transport.ts';
+import { createPortTransport, type PortLike } from '../transport/port-transport.ts';
 
 /** Fixed bridge installed by the container preload — the realm's ONLY Main access. */
 interface DeshelfContainerBridge {
-	onPort(callback: (port: MessagePort) => void): void;
+	onPort(callback: (port: PortLike) => void): void;
 }
 
 declare global {
@@ -92,7 +92,7 @@ async function bootstrap(): Promise<void> {
 	}
 
 	// The Main process transferred exactly one MessagePort into this realm.
-	const port = await new Promise<MessagePort>((resolve, reject) => {
+	const port = await new Promise<PortLike>((resolve, reject) => {
 		const bridge = window.DeshelfContainer;
 		if (bridge === undefined) {
 			reject(new Error('DeshelfContainer bridge is unavailable (container preload missing?)'));
@@ -104,7 +104,7 @@ async function bootstrap(): Promise<void> {
 	let runtime: ToolContainerRuntimeHandle;
 	try {
 		runtime = startToolContainer({
-			transport: createPortTransport(port as unknown as Parameters<typeof createPortTransport>[0]),
+			transport: createPortTransport(port),
 			endpoint,
 			loadDefinition: () => importEntryArtifact(entryUrl),
 			mountSurface: (context, definition) => mountSurfaceComponent(endpoint, context, definition),
