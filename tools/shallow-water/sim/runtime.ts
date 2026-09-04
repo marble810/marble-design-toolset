@@ -15,13 +15,17 @@
  */
 import type { ContainerSurfaceContext } from '@deshelf/tool-sdk';
 import type { AssetContent, ParameterValue } from 'tool-contract';
-import { presetFromParameterValues } from '../preset-init-map.ts';
+import {
+	createInitMapSourceKey,
+	presetFromParameterValues,
+	loadInitMapHeightData,
+	type InitMapSource
+} from './height-data.ts';
 import {
 	readSimParameters,
 	structuralSimKey,
 	type SimParameters
 } from '../parameters.ts';
-import { createInitMapSourceKey, loadInitMapHeightData, type InitMapSource } from './height-data.ts';
 import { ShallowWaterWaveRenderer } from './renderer.ts';
 
 export type RuntimeStatus =

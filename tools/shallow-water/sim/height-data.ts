@@ -4,30 +4,43 @@
  * container-local blob URL delivered by the Host asset adapter — real file paths never
  * reach the Tool.
  */
-import { renderPresetInitMap, type PresetInitMapDescriptor } from '../preset-init-map.ts';
-import type { SimParameters } from '../parameters.ts';
+import { createPresetInitMapKey, renderPresetInitMap, normalizePresetInitMap, PRESET_INIT_MAP_KINDS, PRESET_INIT_MAP_MODES, type PresetInitMapDescriptor } from '../preset-init-map.ts';
+import { readNumber, readOption, type SimParameters } from '../parameters.ts';
 
 export type InitMapSource =
 	| { kind: 'image'; url: string }
 	| { kind: 'preset'; preset: PresetInitMapDescriptor };
 
 export function createInitMapSourceKey(source: InitMapSource): string {
-	return source.kind === 'image' ? `image|${source.url}` : `preset|${createPresetKey(source.preset)}`;
+	return source.kind === 'image' ? `image|${source.url}` : `preset|${createPresetInitMapKey(source.preset)}`;
 }
 
-function createPresetKey(preset: PresetInitMapDescriptor): string {
-	if (preset.kind === 'circle' || preset.kind === 'square') {
-		return [
-			preset.kind,
-			preset.mode,
-			preset.centerX.toFixed(4),
-			preset.centerY.toFixed(4),
-			preset.size.toFixed(4),
-			preset.outlineWidth.toFixed(4),
-			preset.feather.toFixed(4)
-		].join('|');
+/**
+ * Builds the preset descriptor from the flat Host Parameter values. The Store already
+ * rejects out-of-range writes; `normalizePresetInitMap` still clamps the outline width
+ * against the preset size (the one derived constraint that lives between two sliders).
+ * Fallbacks/bounds derive from the shared parameter readers.
+ */
+export function presetFromParameterValues(values: Readonly<Record<string, unknown>>): PresetInitMapDescriptor {
+	const kind = readOption(values, 'presetKind', PRESET_INIT_MAP_KINDS);
+	if (kind === 'circle' || kind === 'square') {
+		return normalizePresetInitMap({
+			kind,
+			centerX: readNumber(values, 'presetCenterX'),
+			centerY: readNumber(values, 'presetCenterY'),
+			size: readNumber(values, 'presetSize'),
+			feather: readNumber(values, 'presetFeather'),
+			mode: readOption(values, 'presetMode', PRESET_INIT_MAP_MODES),
+			outlineWidth: readNumber(values, 'presetOutlineWidth')
+		});
 	}
-	return [preset.kind, preset.position.toFixed(4), preset.thickness.toFixed(4), preset.feather.toFixed(4)].join('|');
+
+	return normalizePresetInitMap({
+		kind,
+		position: readNumber(values, 'presetPosition'),
+		thickness: readNumber(values, 'presetThickness'),
+		feather: readNumber(values, 'presetFeather')
+	});
 }
 
 export async function loadInitMapHeightData(source: InitMapSource, sim: SimParameters): Promise<Float32Array> {

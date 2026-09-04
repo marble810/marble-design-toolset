@@ -5,8 +5,10 @@ export const PRESET_INIT_MAP_KINDS = [
 	'vertical-bar'
 ] as const;
 
+export const PRESET_INIT_MAP_MODES = ['fill', 'outline'] as const;
+
 export type PresetInitMapKind = (typeof PRESET_INIT_MAP_KINDS)[number];
-export type PresetInitMapMode = 'fill' | 'outline';
+export type PresetInitMapMode = (typeof PRESET_INIT_MAP_MODES)[number];
 
 interface CircleSquarePresetBase {
 	kind: 'circle' | 'square';
@@ -45,47 +47,6 @@ export type PresetInitMapDescriptor =
 	| SquarePreset
 	| HorizontalBarPreset
 	| VerticalBarPreset;
-
-export function createDefaultPresetInitMap(
-	kind: PresetInitMapKind = 'circle'
-): PresetInitMapDescriptor {
-	switch (kind) {
-		case 'circle':
-			return {
-				kind,
-				centerX: 0.5,
-				centerY: 0.5,
-				size: 0.34,
-				feather: 0.05,
-				mode: 'fill',
-				outlineWidth: 0.08
-			};
-		case 'square':
-			return {
-				kind,
-				centerX: 0.5,
-				centerY: 0.5,
-				size: 0.38,
-				feather: 0.05,
-				mode: 'fill',
-				outlineWidth: 0.08
-			};
-		case 'horizontal-bar':
-			return {
-				kind,
-				position: 0.5,
-				thickness: 0.18,
-				feather: 0.05
-			};
-		case 'vertical-bar':
-			return {
-				kind,
-				position: 0.5,
-				thickness: 0.18,
-				feather: 0.05
-			};
-	}
-}
 
 export function normalizePresetInitMap(
 	preset: PresetInitMapDescriptor
@@ -239,47 +200,4 @@ function clamp01(value: number): number {
 
 function formatKeyNumber(value: number): string {
 	return value.toFixed(4);
-}
-
-/** Reads a finite number out of a raw Parameter snapshot entry. */
-function readNumber(values: Readonly<Record<string, unknown>>, id: string, fallback: number): number {
-	const raw = values[id];
-	return typeof raw === 'number' && Number.isFinite(raw) ? raw : fallback;
-}
-
-/** Reads a select option out of a raw Parameter snapshot entry. */
-function readOption<T extends string>(
-	values: Readonly<Record<string, unknown>>,
-	id: string,
-	options: readonly T[],
-	fallback: T
-): T {
-	return options.includes(values[id] as T) ? (values[id] as T) : fallback;
-}
-
-/**
- * Builds the preset descriptor from the flat Host Parameter values. The Store already
- * rejects out-of-range writes; `normalizePresetInitMap` still clamps the outline width
- * against the preset size (the one derived constraint that lives between two sliders).
- */
-export function presetFromParameterValues(values: Readonly<Record<string, unknown>>): PresetInitMapDescriptor {
-	const kind = readOption(values, 'presetKind', PRESET_INIT_MAP_KINDS, 'circle');
-	if (kind === 'circle' || kind === 'square') {
-		return normalizePresetInitMap({
-			kind,
-			centerX: readNumber(values, 'presetCenterX', 0.5),
-			centerY: readNumber(values, 'presetCenterY', 0.5),
-			size: readNumber(values, 'presetSize', 0.34),
-			feather: readNumber(values, 'presetFeather', 0.05),
-			mode: readOption(values, 'presetMode', ['fill', 'outline'] as const, 'fill'),
-			outlineWidth: readNumber(values, 'presetOutlineWidth', 0.08)
-		});
-	}
-
-	return normalizePresetInitMap({
-		kind,
-		position: readNumber(values, 'presetPosition', 0.5),
-		thickness: readNumber(values, 'presetThickness', 0.18),
-		feather: readNumber(values, 'presetFeather', 0.05)
-	});
 }

@@ -1,11 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import {
-	createDefaultPresetInitMap,
-	createPresetInitMapKey,
-	normalizePresetInitMap,
-	presetFromParameterValues,
-	renderPresetInitMap
-} from './preset-init-map.ts';
+import { createPresetInitMapKey, normalizePresetInitMap, renderPresetInitMap } from './preset-init-map.ts';
+import { presetFromParameterValues } from './sim/height-data.ts';
 
 function average(values: Float32Array): number {
 	let total = 0;
@@ -83,12 +78,6 @@ describe('preset init map', () => {
 		const highAverage = average(renderPresetInitMap(preset, 256, 256));
 
 		expect(Math.abs(lowAverage - highAverage)).toBeLessThan(0.02);
-	});
-
-	test('createDefaultPresetInitMap provides a filled circle by default', () => {
-		const preset = createDefaultPresetInitMap();
-		expect(preset.kind).toBe('circle');
-		expect(preset.mode).toBe('fill');
 	});
 
 	test('presetFromParameterValues rebuilds the descriptor from the flat Parameter Set', () => {

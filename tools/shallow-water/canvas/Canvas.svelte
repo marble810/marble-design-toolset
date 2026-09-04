@@ -6,7 +6,7 @@
 	 * realm-scoped holder; nothing crosses the Environment API except Parameter changes.
 	 */
 	import { onMount } from 'svelte';
-	import type { ContainerSurfaceContext } from 'tool-sdk';
+	import type { ContainerSurfaceContext } from '@deshelf/tool-sdk';
 	import { createShallowWaterRuntime, type RuntimeStatus } from '../sim/runtime.ts';
 	import { bindSessionRuntime } from '../sim/session.ts';
 

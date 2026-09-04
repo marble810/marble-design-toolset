@@ -8,11 +8,12 @@
  * are strings; the renderer needs numbers). Nothing here mutates Host state.
  */
 import type { ParameterDefinition } from '@deshelf/tool-sdk';
+import { PRESET_INIT_MAP_KINDS, PRESET_INIT_MAP_MODES } from './preset-init-map.ts';
 
 export const RESOLUTION_OPTIONS = ['128', '256', '512', '1024', '2048'] as const;
 export const SOURCE_MODE_OPTIONS = ['preset', 'image'] as const;
-export const PRESET_KIND_OPTIONS = ['circle', 'square', 'horizontal-bar', 'vertical-bar'] as const;
-export const PRESET_MODE_OPTIONS = ['fill', 'outline'] as const;
+export const PRESET_KIND_OPTIONS = PRESET_INIT_MAP_KINDS;
+export const PRESET_MODE_OPTIONS = PRESET_INIT_MAP_MODES;
 
 export type SourceMode = (typeof SOURCE_MODE_OPTIONS)[number];
 export type PresetKind = (typeof PRESET_KIND_OPTIONS)[number];
@@ -208,22 +209,37 @@ export interface SimParameters {
 	invert: boolean;
 }
 
-function clampNumber(value: number, min: number, max: number, fallback = min): number {
-	if (!Number.isFinite(value)) return fallback;
+function clampNumber(value: number, min: number, max: number): number {
+	if (!Number.isFinite(value)) return min;
 	return Math.min(max, Math.max(min, value));
 }
 
-function readNumber(values: Readonly<Record<string, unknown>>, id: string, fallback: number, min: number, max: number): number {
+/**
+ * Raw-snapshot readers: fallbacks and bounds derive from the Parameter definitions
+ * themselves, so a default/constraint change has exactly one place to edit.
+ */
+export function readNumber(values: Readonly<Record<string, unknown>>, id: string): number {
+	const definition = PARAMETER_DEFINITIONS[id];
+	if (definition === undefined || definition.type !== 'number' || definition.constraint.type !== 'number') return 0;
 	const raw = values[id];
-	return typeof raw === 'number' && Number.isFinite(raw) ? clampNumber(raw, min, max) : fallback;
+	const value = typeof raw === 'number' && Number.isFinite(raw) ? raw : (definition.default as number);
+	return clampNumber(value, definition.constraint.min, definition.constraint.max);
 }
 
-function readBoolean(values: Readonly<Record<string, unknown>>, id: string, fallback: boolean): boolean {
-	return typeof values[id] === 'boolean' ? (values[id] as boolean) : fallback;
+export function readBoolean(values: Readonly<Record<string, unknown>>, id: string): boolean {
+	const raw = values[id];
+	if (typeof raw === 'boolean') return raw;
+	const definition = PARAMETER_DEFINITIONS[id];
+	return definition !== undefined && typeof definition.default === 'boolean' ? definition.default : false;
 }
 
-function readOption<T extends string>(values: Readonly<Record<string, unknown>>, id: string, options: readonly T[], fallback: T): T {
-	return options.includes(values[id] as T) ? (values[id] as T) : fallback;
+export function readOption<T extends string>(values: Readonly<Record<string, unknown>>, id: string, options: readonly T[]): T {
+	const raw = values[id];
+	if (options.includes(raw as T)) return raw as T;
+	const definition = PARAMETER_DEFINITIONS[id];
+	return definition !== undefined && typeof definition.default === 'string' && options.includes(definition.default as T)
+		? (definition.default as T)
+		: options[0];
 }
 
 function clampResolution(value: number): number {
@@ -239,24 +255,22 @@ function clampResolution(value: number): number {
  * out-of-range writes, so the clamps here only guard against a stale/foreign snapshot.
  */
 export function readSimParameters(values: Readonly<Record<string, unknown>>): SimParameters {
-	const resolution = clampResolution(
-		Number.parseInt(readOption(values, 'resolution', RESOLUTION_OPTIONS, '256'), 10)
-	);
+	const resolution = clampResolution(Number.parseInt(readOption(values, 'resolution', RESOLUTION_OPTIONS), 10));
 	return {
 		resolution,
-		amplitude: readNumber(values, 'amplitude', 0.45, 0, 2),
-		waveSpeed: readNumber(values, 'waveSpeed', 0.18, 0, 0.35),
-		flowX: readNumber(values, 'flowX', 0, -1, 1),
-		flowY: readNumber(values, 'flowY', 0, -1, 1),
-		distortStrength: readNumber(values, 'distortStrength', 0, 0, 1),
-		distortScale: readNumber(values, 'distortScale', 4, 0.5, 12),
-		distortSpeed: readNumber(values, 'distortSpeed', 0.01, 0, 0.05),
-		damping: readNumber(values, 'damping', 0.995, 0.9, 0.999),
-		edgeAbsorb: readNumber(values, 'edgeAbsorb', 0.9, 0, 1),
-		restThreshold: readNumber(values, 'restThreshold', 0.00003, 0, 0.01),
-		stepsPerFrame: Math.round(readNumber(values, 'stepsPerFrame', 2, 1, 8)),
-		contrast: readNumber(values, 'contrast', 1.8, 0.25, 6),
-		invert: readBoolean(values, 'invert', false)
+		amplitude: readNumber(values, 'amplitude'),
+		waveSpeed: readNumber(values, 'waveSpeed'),
+		flowX: readNumber(values, 'flowX'),
+		flowY: readNumber(values, 'flowY'),
+		distortStrength: readNumber(values, 'distortStrength'),
+		distortScale: readNumber(values, 'distortScale'),
+		distortSpeed: readNumber(values, 'distortSpeed'),
+		damping: readNumber(values, 'damping'),
+		edgeAbsorb: readNumber(values, 'edgeAbsorb'),
+		restThreshold: readNumber(values, 'restThreshold'),
+		stepsPerFrame: Math.round(readNumber(values, 'stepsPerFrame')),
+		contrast: readNumber(values, 'contrast'),
+		invert: readBoolean(values, 'invert')
 	};
 }
 

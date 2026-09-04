@@ -55,6 +55,18 @@ const browser = await puppeteer.launch({
 	args: ['--no-sandbox', '--disable-dev-shm-usage']
 });
 
+/** PNG IHDR width/height live at byte offsets 16..23. */
+async function pngSize(file) {
+	const handle = await fs.open(file, 'r');
+	try {
+		const header = Buffer.alloc(24);
+		await handle.read(header, 0, 24, 0);
+		return { width: header.readUInt32BE(16), height: header.readUInt32BE(20) };
+	} finally {
+		await handle.close();
+	}
+}
+
 /** Reads the hue label mirrored inside the Slate container (cross-frame, same-origin). */
 async function readSlateHue(page) {
 	return page.evaluate(() => {
@@ -186,6 +198,41 @@ try {
 		throw new Error(`reload did not settle cleanly: ${JSON.stringify(reloadNotes)}`);
 	}
 	console.log('SMOKE: staged reload → Ready ✔');
+
+	// --- Visual Outputs: deterministic PNG + recorded video exports -------------------
+	const downloads = path.join(REPO, 'temp', 'smoke-downloads');
+	await fs.rm(downloads, { recursive: true, force: true });
+	await fs.mkdir(downloads, { recursive: true });
+	const cdp = await page.createCDPSession();
+	await cdp.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: downloads });
+
+	// Still export = deterministic simulation frame 0 at the current resolution.
+	await page.evaluate(() => {
+		const button = [...document.querySelectorAll('.forge-host__action')].find((b) => b.textContent?.includes('Height Map PNG'));
+		if (button === undefined) throw new Error('Height Map PNG export button not found');
+		button.click();
+	});
+	await new Promise((resolve) => setTimeout(resolve, 2500));
+	const stillFile = path.join(downloads, 'shallow-water-heightMap.png');
+	if (!existsSync(stillFile)) throw new Error('heightMap PNG export did not download');
+	const size = await pngSize(stillFile);
+	if (size.width !== 256 || size.height !== 256) {
+		throw new Error(`heightMap PNG should be the 256x256 simulation frame, got ${size.width}x${size.height}`);
+	}
+	console.log('SMOKE: heightMap PNG export (256x256 deterministic frame) ✔');
+
+	// Video export = 90-frame deterministic replay recorded in the container (~4s).
+	await page.evaluate(() => {
+		const button = [...document.querySelectorAll('.forge-host__action')].find((b) => b.textContent?.includes('Simulation Video'));
+		if (button === undefined) throw new Error('Simulation Video export button not found');
+		button.click();
+	});
+	await new Promise((resolve) => setTimeout(resolve, 9000));
+	const videoFiles = (await fs.readdir(downloads)).filter((name) => name.startsWith('shallow-water-simulationVideo'));
+	if (videoFiles.length === 0) throw new Error('simulationVideo export did not download');
+	const videoStat = await fs.stat(path.join(downloads, videoFiles[0]));
+	if (videoStat.size < 10_000) throw new Error(`simulationVideo export looks empty (${videoStat.size} bytes)`);
+	console.log(`SMOKE: simulationVideo export (${videoFiles[0]}, ${videoStat.size} bytes) ✔`);
 
 	// Filter benign errors (favicon etc.) — surface everything else.
 	const relevant = consoleErrors.filter((text) => !text.includes('favicon'));

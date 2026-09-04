@@ -5,7 +5,7 @@
 	 * pointer completion — individual pointer events never cross the Environment API.
 	 */
 	import { onMount } from 'svelte';
-	import type { CatalogEntry, InspectorBinding, ParameterDescriptor } from 'tool-contract';
+	import type { CatalogEntry, InspectorBinding, InspectorElement, ParameterDescriptor } from 'tool-contract';
 	import type { InspectorHost, InspectorNodeState, InspectorViewModel, ParameterStore } from 'tool-host';
 
 	interface Props {
@@ -119,9 +119,7 @@
 
 {#snippet renderNode(node: InspectorNodeState)}
 	{@const meta = nodeMeta(node.id)}
-	{#if node.visible === false}
-		<!-- hidden by the element's visibleWhen rule -->
-	{:else if node.kind === 'section'}
+	{#if node.kind === 'section'}
 		<div class="forge-inspector__section">
 			<div class="forge-inspector__title">{node.title}</div>
 			{#each node.children ?? [] as child (child.id)}
