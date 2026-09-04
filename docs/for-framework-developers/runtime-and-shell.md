@@ -1,8 +1,10 @@
 # Runtime 与 Workspace architecture
 
-> 本文描述 Catalog-driven 目标 architecture。迁移前实现中的 `tool-registry.ts`、同 realm Svelte contexts 与 Tool-owned panels 不是目标 interface。
+> 本文描述 Catalog-driven runtime architecture。旧同 realm runtime（`tool-registry.ts`、Svelte tool contexts、Tool-owned panels 与旧 canvas-export registry）已在 MAB-70 迁移完成后删除。
 
 ## Workspace
+
+Deshelf Web 根路由（`/`）即 Catalog-driven Tool Host：加载构建期生成的静态 Catalog、列出可用 Entry，并以 Host chrome（Standard Inspector、Asset Input、Export、Restart/Reload/Reset）打开 Tool。
 
 Deshelf Host 拥有顶层 Workspace：
 
@@ -101,12 +103,9 @@ Host 是 Parameter Store 唯一权威。computed 由 Host 调度，Main 运行�
 
 ## IO 与 Export
 
-现有 file-input、canvas-export 与 render lifecycle implementation 可以保留并深埋到 `tool-host`，但 Tool 不再通过同 realm Svelte context 注册。
-
-- Environment Inventory 决定当前 Asset/Export adapters 是否存在。
-- Web adapter 可以交付 blob 或用户选择结果。
-- Desktop adapter 不向 Tool 暴露真实文件路径。
-- Visual Output encoding、picker、drop parsing 与对象 URL cleanup 由 Host implementation 统一处理。
+- Asset Input 与 Visual Output 的选择/执行都由 Host 编排；Container 只拿到可读内容 URL（Web：blob URL；Desktop：`deshelf-cache://` opaque URL，真实路径不进 Tool）。
+- Visual Output 的 render/encode 在 **Main Container** 内执行（参考 `tools/shallow-water/sim/export-replay.ts`）；Host 拿到编码后的 Blob 负责下载/写盘确认。
+- 旧的同 realm file-input / canvas-export / render-host runtime 已删除；Container 内的生命周期由 Tool 私有 runtime 模块负责（shallow-water 的 `sim/runtime.ts` 是参考实现）。
 
 ## Reload
 

@@ -1,35 +1,32 @@
 # Export Workflow
 
-Read this only when the tool needs image or video export.
+Export = Visual Outputs declared in the Tool Entry `outputs` named map. Only add an output when the tool genuinely needs it.
 
-## Read First
+## Declare
 
-1. `docs/guides/Making Tools/tool-export-guide.md`
-2. `openspec/specs/tool-canvas-export/spec.md`
+```ts
+outputs: {
+  heightMap: {
+    kind: 'image',            // 'image' | 'video'
+    label: 'Height Map PNG',
+    mime: 'image/png',
+    async render() { /* runs in the Main Container */ }
+  }
+}
+```
 
-## Decision Rule
+- Stable ID comes from the map key (unique across all five named maps).
+- `render` returns a `Blob`, `ArrayBuffer`, typed view, or `blob:`/`data:` URL; the container runtime normalizes it into serializable content.
+- The descriptor (`kind`, `label`, `mime`, optional `width`/`height`) is what the Catalog carries; the callback never is.
 
-Do not add export by default. Add it only when the tool has a real user-facing need to export generated output.
+## Implement
 
-## Required Pieces
+- The callback runs inside the Container when the Host sends `export.execute`. It may use DOM APIs (`canvas.toBlob`, `MediaRecorder`) — the container realm allows them.
+- For simulation tools, replay deterministically from frame 0 in an offscreen renderer and record with `captureStream(0)` + manual `requestFrame()` pacing; keep total time inside the export timeout (default 10s). Reference: `tools/shallow-water/sim/export-replay.ts`.
+- Read current values through the session runtime (parameters snapshot + decoded asset state), not from the preview renderer's live frame.
+- Never register an exporter after Canvas mount; runtime registration was deleted with the old canvas-export runtime.
 
-If export is supported, both layers must exist:
+## Host Side
 
-1. metadata declaration in `metadata.json`
-2. runtime exporter registration from the tool's rendering side
-
-If metadata declares export but no exporter registers at runtime, the framework will surface disabled export controls.
-
-## Choose The Export Source
-
-- Use `canvas` when the tool already renders to a canvas that can be captured directly.
-- Use `render` when deterministic frame rendering is needed.
-- Use `dom` when the export source is DOM-driven and must be rasterized.
-
-## Integration Checklist
-
-- metadata export flags match the real capabilities
-- exporter reports accurate content size
-- registration lifecycle is tied to mount and cleanup
-- image and video affordances only appear when truly supported
-- build still passes after wiring export
+- The Host renders Export buttons from the Catalog descriptors and downloads the encoded Blob (Web) or writes it to disk with user confirmation (Desktop). The tool implements nothing UI-side.
+- Export shares the command timeout budget; a long encode that exceeds it fails with `export-timeout`.

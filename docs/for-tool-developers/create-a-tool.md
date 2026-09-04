@@ -1,1000 +1,231 @@
-# Tool 开发入门
+# 创建 Tool Project
 
-> **迁移期说明：**本文描述当前尚未迁移的 `metadata.json`、master Svelte 与 `tool-registry.ts` implementation，仅供维护旧代码。新 Tool Project 不应继续采用这套 schema；目标 contract 见 [`../architecture/deshelf-architecture.md`](../architecture/deshelf-architecture.md)，新作者指南将在 MAB-70 完成后替换本文。
+> 本文是 Catalog-driven architecture 下的 Tool 作者指南。迁移期的 `metadata.json`、master Svelte、`tool-registry.ts` 与 Tool-owned panels 已删除，不再存在第二条路径。完整参考实现见 `tools/hello-canvas/`（最小样例）与 `tools/shallow-water/`（GPU 模拟 + Asset + Export 样例）。
 
-## 开始之前
+## 目录
 
-这份指南告诉你如何在当前 Marble Design Toolset（mdt.）中从零创建一个 tool，让它自动出现在 workspace 的 Open Tool 列表里，并与现有的 shell、路由和 tech stack 加载机制无缝衔接。
+1. [目录结构](#目录结构)
+2. [manifest.json](#manifestjson)
+3. [Tool Entry（index.ts）](#tool-entryindexts)
+4. [Parameter 定义](#parameter-定义)
+5. [Inspector Tree](#inspector-tree)
+6. [Asset Input](#asset-input)
+7. [Visual Output](#visual-output)
+8. [Canvas 与 Slate](#canvas-与-slate)
+9. [Framework Libraries](#framework-libraries)
+10. [Container 内共享状态](#container-内共享状态)
+11. [构建与验证](#构建与验证)
+12. [规则清单](#规则清单)
 
-读完后你应该能：
-
-- 建立正确的目录结构
-- 写出满足运行时合约的 `metadata.json` 和 `index.ts`
-- 把自己的 UI 挂进 `LeftPanel` 和 `PreviewCanvas`
-- 在需要导入本地图像、影片或文字时复用统一文件输入 runtime
-- 在需要时声明 Three.js、Pixi.js 或 GSAP 并安全使用
-- 明确知道哪些事情不能做
-
-相关参考文件：
-
-| 文件 | 内容 |
-| --- | --- |
-| `src/lib/tool-sdk/index.ts` | 面向 tool 作者的公共 SDK：`ToolDefinition`、runtime context、source input、共享 IO UI、export context、render host 与 tech stack helper |
-| `src/lib/components/tool-io/` | `SourceInputSection` 与 `DropZone` 的实现入口；新代码通常直接使用 SDK re-export |
-| `src/lib/components/shell/index.ts` | tool 可组合的公开布局组件：`LeftPanel`、`RightPanel`、`Section`、`PreviewCanvas`、`FullStage` |
-| `src/lib/components/ui/index.ts` | tool 可复用的公开 UI primitive 与表单组件 |
-| `src/lib/runtime/**` | framework internal 实现细节；除兼容窗口内的历史路径外，新代码不应直接依赖 |
-| `src/tools/hello-world/` | 最简 tool 示例 |
-| `src/tools/aspect-ratio/` | 参数型 tool 示例 |
-| `src/tools/shallow-water-height/` | Three / render host / export 示例 |
-
-## 推荐方式：先用脚手架
-
-当前仓库已经提供项目内脚手架命令。新 tool 的最短上手路径是：先选最接近目标的 capability recipe，生成能跑的 wiring，再替换成自己的业务逻辑。
-
-```bash
-bun run create:tool
-```
-
-该命令会先收集：
-
-- `tool name`
-- `capability recipe`
-
-首批 recipe：
-
-| Recipe | 适用场景 | 生成内容 |
-| --- | --- | --- |
-| `preview-basic` | 固定尺寸预览、参数面板、纯 DOM / SVG / Canvas 起步 | `LeftPanel` + `RightPanel` + `PreviewCanvas` + 私有 preview 子组件 |
-| `source-preview` | 需要导入本地图像、影片或文字文件 | `createToolSourceInput()`、`SourceInputSection`、`DropZone` 和预览占位 |
-| `layout-template` | 平面版式模板、可变画布尺寸、多素材输入、字体和 DOM PNG 导出 | `createLayoutToolController()`、多 source slots、字体管线、`PreviewCanvas` DOM 预览和 framework export |
-| `pixi-preview` | PixiJS 2D 渲染、纹理、粒子或滤镜工具 | `techStack: ['pixi']`、`createRenderHostLifecycle()`、`createPixiApplicationHost()` |
-| `three-stage` | Three.js / WebGL 全出血舞台 | `techStack: ['three']`、`FullStage`、`createThreeRenderHost()` 和 active-aware animation loop |
-| `preview-export` | 需要导出预览图的固定尺寸工具 | `metadata.json` 的 `export` 声明、`createCanvas2DRenderHost()` 和 framework export registration |
-| `custom` | recipe 不贴合，想保留旧式空白 starter | 继续手动选择 `preview` / `stage` 和 `three`、`pixi`、`gsap` tech stack |
-
-recipe 是可选加速器，不是后续实现约束。生成后你可以自由重构私有子组件、参数模型和渲染逻辑；只要继续满足 tool schema 与 host boundary，framework 仍把它视为有效 tool。
-
-脚手架会自动完成这些事情：
-
-- 把输入名称规范化为 `tool-id`、显示名和 PascalCase master 组件名
-- 生成 `metadata.json`、`index.ts`、唯一的 root-level master `.svelte`
-- 在 `components/` 下生成一个 recipe 或 starter 对应的私有子组件
-- 默认写入 `enabled: true`
-- 只在 `index.ts` 中写入 `techStack`，不会污染 `metadata.json`
-- 对 `preview-export` 只声明 framework export 能力并注册 exporter，不生成自定义下载代码
-- 对 `source-preview` 复用 SDK re-export 的 source input 与 drop UI，不复制 picker / drop / error glue code
-- 对 `layout-template` 使用 layout controller 管理尺寸、source slots、字体和 DOM exporter，不引入 Three/Pixi/GSAP
-
-默认 metadata 如下：
-
-- `desc`: recipe 或 starter 对应的英文描述
-- `tag`: `['starter', ...]`，recipe 路径会包含 `recipe` 与能力标签
-- `version`: `1.0.0`
-
-如果 recipe 不匹配，选择 `custom` 即可回到基础 starter；如果你需要完全手写或审查脚手架输出，继续阅读下面的手工目录与 contract 说明。
-
-## 快速上手
-
-如果你想手工创建或审查脚手架生成结果，这是最小可运行示例的完整形态。后面的章节会逐一解释每个决策背后的原因。
-
-目录结构：
+## 目录结构
 
 ```text
-src/tools/frame-label/
-├── metadata.json
-├── index.ts
-├── FrameLabel.svelte
-└── components/
+tools/<slug>/
+├─ manifest.json          # 根目录唯一 Tool Manifest
+├─ index.ts               # 固定 Tool Entry，唯一 export default defineVisualTool
+├─ tsconfig.json          # 仅服务 IDE；不进入构建
+├─ .gitignore             # 至少忽略 .deshelf/
+├─ canvas/Canvas.svelte   # Main Container 的 Visual Tool Surface
+├─ slate/Slate.svelte     # 可选：第二 Container（独立 realm）
+├─ parameters.ts          # 可选拆分：Parameter 定义
+├─ inspector.ts           # 可选拆分：createInspector
+├─ outputs.ts             # 可选拆分：Visual Output 定义
+├─ sim/                   # 可选拆分：simulation / 渲染热路径
+└─ .deshelf/              # 生成物（Desktop 构建成功后写入；gitignore）
 ```
 
-`metadata.json`：
+`parameters.ts`、`inspector.ts`、`outputs.ts`、`sim/` 只是私有组织；唯一登记点仍是根 `index.ts`。不得出现第二个注册入口，也不得自带 `node_modules`、第三方 package 或 Vite/Svelte 配置。
+
+## manifest.json
 
 ```json
 {
-  "name": "Frame Label",
-  "desc": "Add a short label to a fixed-size preview frame.",
-  "tag": ["example", "starter", "preview"],
+  "contractVersion": 1,
+  "projectId": "8f2c1a0e-1111-4222-8333-444455556666",
+  "slug": "shallow-water",
+  "name": "Shallow Water Height",
+  "description": "Generate black-and-white shallow water height animations.",
+  "tags": ["simulation", "height-map"],
   "version": "1.0.0",
-  "enabled": true
+  "forgeProfile": "forge-v1",
+  "libraries": ["three"]
 }
 ```
 
-`index.ts`：
+- `projectId` 是不可变逻辑身份（UUID，一次生成永不复用）；复制文件夹不会改变身份，同一 Project ID 出现在多个 Location 时由 Host 用 `catalogEntryId` 区分。
+- `slug` 是 kebab-case 且全局唯一；`version` 必须是 semver。
+- Manifest 是**封闭 schema**：只允许上述静态身份字段。entry、Parameter、Command、Inspector、Capability、Slate、Export、`enabled` 都不允许出现。
+
+## Tool Entry（index.ts）
 
 ```ts
-import metadata from './metadata.json';
-import type { ToolDefinition } from '$lib/tool-sdk/index.js';
+import { defineInspectorCallback, defineVisualTool } from '@deshelf/tool-sdk';
 
-const definition = {
-  metadata,
-  loadComponent: () => import('./FrameLabel.svelte')
-} satisfies ToolDefinition;
-
-export default definition;
-```
-
-`FrameLabel.svelte`：
-
-```svelte
-<script lang="ts">
-  import { LeftPanel, PreviewCanvas, RightPanel, Section } from '$lib/components/shell/index.js';
-
-  let label = $state('Sample Label');
-  let accent = $state('#9580ff');
-</script>
-
-<LeftPanel>
-  <Section title="Content">
-    <label class="frame-label__field">
-      <span class="frame-label__caption">Label</span>
-      <input class="pixel-input" bind:value={label} maxlength="24" placeholder="Enter a label" />
-    </label>
-  </Section>
-
-  <Section title="Style" collapsible>
-    <label class="frame-label__field">
-      <span class="frame-label__caption">Accent Color</span>
-      <input class="pixel-input" bind:value={accent} placeholder="#9580ff" />
-    </label>
-  </Section>
-</LeftPanel>
-
-<RightPanel>
-  <PreviewCanvas contentWidth={640} contentHeight={360} label="Frame Label Preview">
-    <div class="frame-label__preview" style={`--frame-label-accent:${accent};`}>
-      <div class="frame-label__badge">Preview</div>
-      <h2 class="frame-label__title">{label || 'Sample Label'}</h2>
-    </div>
-  </PreviewCanvas>
-</RightPanel>
-
-<style>
-  .frame-label__field {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-
-  .frame-label__caption {
-    color: var(--color-fg-secondary);
-    font-size: var(--font-size-1);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-  }
-
-  .frame-label__preview {
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-    width: 100%;
-    height: 100%;
-    padding: 32px;
-    border: 2px solid var(--frame-label-accent);
-    background: #16202f;
-  }
-
-  .frame-label__badge {
-    display: inline-flex;
-    align-self: flex-start;
-    align-items: center;
-    height: 22px;
-    padding: 0 var(--space-2);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    background: rgba(9, 13, 22, 0.78);
-    color: var(--color-fg-secondary);
-    font-size: var(--font-size-1);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
-  .frame-label__title {
-    margin: var(--space-4) 0 0;
-    font-size: 36px;
-    line-height: 1;
-  }
-</style>
-```
-
-完成后执行 `npm run build`。如果构建通过，这个 tool 就已经自动出现在 catalog 里了，不需要手动注册任何东西。
-
-## 框架职责边界
-
-在写第一行代码前，有一件事值得先明确：framework 和 tool 各自负责什么。
-
-Framework 负责：
-
-- workspace 顶层壳层，包括 header、tabs、settings、dialogs
-- tool catalog 发现与 hash 路由
-- `ToolShell` 的创建和挂载
-- `MainInfo` 的渲染
-- 提供可选的右侧容器组件（`PreviewCanvas` 用于 2D 预览，`FullStage` 用于全出血场景）
-- heavy tech stack 的预加载
-- 视口宽度小于 720px 时的阻断屏幕
-
-Tool 只负责两件事：
-
-- 左侧参数和信息内容
-- 右侧内容（自由选择使用 PreviewCanvas、FullStage 或自定义内容填充 RightPanel）
-
-这个边界不是建议，而是框架能正常工作的前提。tool 如果重写 shell 层、重新造一套 workspace 结构，得到的不是扩展，而是破坏。
-
-## Host–Tool Boundary 与公共 SDK
-
-当前仓库采用 trusted in-repo tool 模型：tool 与 framework 同仓构建，但仍必须通过稳定边界协作。这个边界的目标不是限制 tool 的内部架构，而是避免 tool 反向耦合到 host internals。
-
-### Host owns
-
-- tool discovery、catalog、definition 懒加载和错误兜底
-- workspace 顶层 shell、tabs、dialogs、settings 与 viewport guard
-- runtime capability 注入，例如 runtime context、export context、source input、render host 和 tech stack 加载
-- public API 的兼容、弃用和迁移策略
-
-### Tool owns
-
-- tool 内部状态模型、组件拆分和渲染实现
-- master `.svelte` 内的 `LeftPanel` 与 `RightPanel` 内容组合
-- 私有 `components/` 下的领域 UI、canvas/WebGL/SVG/DOM 渲染和业务逻辑
-
-### Public API 与 internal implementation
-
-新 tool 默认只从这些公开入口接入宿主能力：
-
-- `$lib/tool-sdk/index.js`：公共 SDK，包含 `ToolDefinition`、`getToolRuntimeContext()`、`createToolSourceInput()`、`SourceInputSection`、`DropZone`、`getCanvasExportContext()`、`createRenderHostLifecycle()`、tech stack helper 与相关类型。
-- `$lib/components/shell/index.js`：公开布局组件。tool 可以组合 `LeftPanel`、`RightPanel`、`Section`、`PreviewCanvas`、`FullStage`，但不能重新定义 workspace 顶层 shell。
-- `$lib/components/ui/index.js`：公开 UI primitive；`$lib/components/tool-io/index.js` 仍是共享 source UI 的实现入口，但新 tool 默认从 SDK re-export 导入。
-
-`$lib/runtime/workspace-controller/*`、`$lib/runtime/tool-registry*`、`$lib/runtime/tool-shell-context*`、`$lib/components/workspace/*` 等路径属于 framework internal。它们可以被 framework 重构，不构成 tool contract。历史 tool 在兼容窗口内仍可使用部分旧入口，但新文档、脚手架和示例不再推荐这些路径。
-
-如果确实需要下探 internal，请先通过 OpenSpec change 把缺口提升为新的 public SDK / capability。临时 escape hatch 必须在代码评审中说明原因、风险和迁移计划，不能把 internal 路径写进脚手架或通用指南。
-
-### 迁移与隔离演进
-
-Public API 发生调整时，framework 必须提供替代入口、兼容窗口和迁移说明；不能只通过移动 internal 文件隐式打破 tool。当前隔离层级是 **Level 0 / trusted in-repo tool**：以 public boundary 隔离为主，不引入 worker 或 iframe 沙箱。未来如果进入 Level 1/2，更强隔离也必须继续通过 capability allowlist 与 message bridge 访问 host，而不是开放 internal 模块。
-
-## Tab 会话语义
-
-workspace 现在采用 keep-alive 的 tab session 模型：
-
-- 切换 tab 时，工具实例**不会**被销毁；同一个已打开 tool 会复用原有会话。
-- 只有用户关闭 tab 时，对应 tool 才会真正卸载。
-- 刷新页面后，workspace 只恢复 `openToolIds`、`activeToolId` 和左侧面板宽度；tool 自己的内部参数默认不会自动持久化。
-
-这意味着一个重要区别：不要再把“切到别的 tab”当成卸载信号。`onMount` 返回的清理函数只会在工具真正销毁时执行，例如用户关闭 tab。
-
-如果你的 tool 有 Pixi、Three、ticker、定时器、观察器或持续计算，优先使用公共 SDK 中的 render host helper。它会读取 session active 状态，并提供自动 cleanup、RAF 暂停/恢复和 exporter 自动注销：
-
-```ts
-import { createRenderHostLifecycle } from '$lib/tool-sdk/index.js';
-
-const renderHost = createRenderHostLifecycle();
-const isReady = $derived(renderHost.isReady);
-const errorMessage = $derived(renderHost.errorMessage);
-
-renderHost.startAnimationLoop(() => {
-  // 只有当前 tool session active 时才会执行
+export default defineVisualTool({
+  parameters: { /* named map */ },
+  assets: { /* typed Asset Slots */ },
+  commands: { /* 公开 Tool Command */ },
+  privateCallbacks: {
+    resimulate: defineInspectorCallback({ run() { /* Main-only 回调 */ } })
+  },
+  outputs: { /* Visual Output */ },
+  createInspector({ root, parameters, commands, privateCallbacks }) {
+    /* 构建 retained Inspector Tree */
+  },
+  canvas: () => import('./canvas/Canvas.svelte'),
+  slate: () => import('./slate/Slate.svelte'),   // 可选
+  dispose() { /* Container 关闭时清理模块级状态 */ }
 });
 ```
 
-底层 `getToolSessionContext()` 仍然存在，但新工具通常不需要直接消费它。
+硬性规则：
 
-## Tool runtime context
+- `index.ts` 顶层**无副作用**：不执行 IO、不创建 GPU 资源、不注册任何东西。
+- Canvas 与 Slate 必须**动态 import**；entry 本体保持轻量，让 Forge 的 extraction worker 能在不加载 Three/Pixi 的情况下求值。
+- `privateCallbacks` 的 map key 就是稳定 callback ID；`run` 实现留在 Main artifact，Catalog 只保存 `{ kind, callbackId }`。
 
-工具内部可以通过 runtime context 读取 framework 提供的稳定身份和服务：
+## Parameter 定义
+
+Parameter 是**扁平 set**，全部声明在 `parameters` named map 中；Host Parameter Store 是合法性的唯一权威。
 
 ```ts
-import { getToolRuntimeContext } from '$lib/tool-sdk/index.js';
+import type { ParameterDefinition } from '@deshelf/tool-sdk';
 
-const runtime = getToolRuntimeContext();
-const toolId = $derived(runtime?.toolId ?? 'unknown-tool');
+export const PARAMETER_DEFINITIONS: Record<string, ParameterDefinition> = {
+  resolution: {
+    type: 'select',
+    label: 'Resolution',
+    default: '256',
+    mode: 'manual',
+    constraint: { type: 'select', options: ['128', '256', '512'] }
+  },
+  amplitude: {
+    type: 'number',
+    label: 'Amplitude',
+    default: 0.45,
+    mode: 'manual',
+    constraint: { type: 'number', min: 0, max: 2, step: 0.01 }
+  }
+};
 ```
 
-runtime context 包含：
+- `type`：`number | boolean | string | select`；`constraint` 必须与 type 匹配。
+- `mode`：`manual`（默认）、`overrideable`、`computed`。`computed` 必须提供 `compute`（纯函数、无 GPU/IO，由 Host 调度、Main 执行）并声明 `dependsOn`。
+- 超出 constraint 的写入会被 Store **拒绝**（而不是 clamp）；Canvas 读取 snapshot 后自行做数值视图转换（如 select 字符串 → number）。
+- 不要为了"凑 computed coverage"添加没有产品意义的派生参数。
 
-- `toolId`：真实目录 id，用于导出文件名、诊断和日志，不要从 metadata name 反推
-- `metadata`：当前 tool 的静态元数据
-- `isActive()`：当前 tab session 是否 active
-- `menuActions` / `dispatchMenuAction()`：MainInfo 菜单动作
-- `declaredTechStacks` / `loadedTechStacks` / `getLoadedTechStack()`：声明和已加载的可选技术栈
+## Inspector Tree
 
-如果只需要渲染生命周期，请优先使用 render host helper；如果只需要文件来源，请优先使用 tool IO facade。
+`createInspector` 在 **Forge 构建期**对 descriptor-only SDK 执行一次，产出的 retained tree 进入 Catalog；Session 中由 Host 直接渲染，Tool 不再持有任何控件组件。
 
-## Tool IO 与共享 workflow UI
+```ts
+import type { InspectorContext } from '@deshelf/tool-sdk';
 
-本地文件来源不要在 tool 内重复维护 picker、drop、Source section 和对象 URL 清理。推荐模式：
-
-```svelte
-<script lang="ts">
-  import { onDestroy } from 'svelte';
-  import {
-    createToolSourceInput,
-    DropZone,
-    SourceInputSection
-  } from '$lib/tool-sdk/index.js';
-
-  const sourceInput = createToolSourceInput({ allowedKinds: ['image', 'video'] });
-  const sourceItem = $derived(sourceInput.currentItem);
-
-  onDestroy(() => sourceInput.dispose());
-</script>
-
-<LeftPanel>
-  <SourceInputSection source={sourceInput} />
-</LeftPanel>
-
-<RightPanel>
-  <DropZone source={sourceInput} ariaLabel="Drop source file">
-    <!-- preview consumes sourceItem -->
-  </DropZone>
-</RightPanel>
-```
-
-参数型 UI 优先复用 `Field`、`SelectField`、`CheckboxField`、`SegmentedControl` 和 `PresetGrid`，不要在每个 tool 里复制 label/error/preset grid 样式。
-
-## 目录 Schema
-
-每个 tool 必须遵循以下结构：
-
-```text
-src/tools/<tool-id>/
-├── metadata.json
-├── index.ts
-├── <ToolName>.svelte
-└── components/
-    ├── PrivatePanel.svelte
-    └── ...
-```
-
-命名规则：
-
-- `tool-id` 使用 kebab-case，例如 `aspect-ratio`、`three-cube`
-- master 组件文件名使用对应 PascalCase，例如 `AspectRatio.svelte`、`ThreeCube.svelte`
-- 工具根目录只允许一个 root-level `.svelte`
-- 其余私有 `.svelte` 一律放进 `components/`
-
-为什么根目录只能有一个 `.svelte`？因为 `index.ts` 的 `loadComponent` 入口必须指向那个唯一的 master 文件。如果根目录里放多个 `.svelte`，code review 时就需要猜哪个是主入口，子组件和入口组件的边界也会消失。
-
-## 每个文件的职责
-
-### `metadata.json`
-
-`metadata.json` 只放无需加载 tool 运行时代码即可判定的静态元数据。runtime 会用它生成 catalog、展示 `MainInfo` 的标题和描述，并决定工具是否进入可用工具集合。
-
-支持字段：
-
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| `name` | `string` | tool 的英文显示名，直接面向用户 |
-| `desc` | `string` | 一句英文描述这个 tool 做什么 |
-| `tag` | `string[]` | 英文小写短词数组 |
-| `version` | `string` | 建议使用 semver，例如 `1.0.0` |
-| `enabled` | `boolean` | 可选硬开关。省略时默认按 `true` 处理；设为 `false` 时，该工具不会出现在工具架中，也不会被 hash 或本地恢复重新激活 |
-
-不应该出现在这里的内容：`techStack`、`loadComponent`、组件路径、默认状态、任何 runtime 逻辑。
-
-错误示例：
-
-```json
-{
-  "name": "My Tool",
-  "desc": "Does something.",
-  "tag": ["example"],
-  "version": "1.0.0",
-  "techStack": ["three"],
-  "loadComponent": "./MyTool.svelte"
+export function buildInspector({ root, parameters, privateCallbacks }: InspectorContext): void {
+  root.section('simulation', 'Simulation', (section) => {
+    section.slider({ id: 'amplitude', label: 'Amplitude', bind: parameters.amplitude });
+    section.button({ id: 'resimulate', label: 'Resimulate', bind: privateCallbacks.resimulate });
+  });
 }
 ```
 
-### `index.ts`
+- Binding 只接受 typed handle（`parameters.<id>` / `commands.<id>` / `privateCallbacks.<id>`）；inline anonymous callback 在 extraction 阶段直接失败。
+- 条件显示用 `visibleWhen`（Host 按 live Store 值求值，支持 `equals: value | value[]`），配合 section 嵌套表达组合条件；不要在运行时重建 tree。
+- 没有 `createInspector` 时，Host 按 Parameter descriptors 生成默认 tree。
 
-`index.ts` 是 tool 的 runtime definition 文件。它告诉 framework 这个 tool 如何加载、需要什么 tech stack、有哪些菜单项。
+## Asset Input
 
-最小模板：
+Asset Slot 声明在 `assets` named map；Host 拥有文件选择与内容生命周期，Container 通过 Environment client 拿到可读 URL。
 
 ```ts
-import metadata from './metadata.json';
-import type { ToolDefinition } from '$lib/tool-sdk/index.js';
-
-const definition = {
-  metadata,
-  loadComponent: () => import('./FrameLabel.svelte')
-} satisfies ToolDefinition;
-
-export default definition;
-```
-
-必须遵守的规则：
-
-- 必须使用 `satisfies ToolDefinition`
-- `loadComponent` 必须是懒加载函数，不要在顶部直接 import master `.svelte`
-- 如果 tool 任意位置会使用 `three`、`pixi` 或 `gsap`，必须在这里声明 `techStack`
-- 文件末尾必须 `export default definition`
-
-### root-level master `.svelte`
-
-这是 tool 的 UI 入口，也是唯一被 `index.ts` 直接引用的组件。它负责：
-
-- 组织 `LeftPanel` 和 `RightPanel` 的内容
-- 管理当前 tool 的局部状态
-- 组合私有子组件
-
-它不应该包含 workspace shell 级别的内容，比如 header、tabs、settings、全局 dialog 等，也不需要再套一层 `ToolShell`。
-
-另外，master `.svelte` 不需要也不应该关心当前 tab 是否活动。需要隐藏态暂停逻辑时，请在真正持有 Pixi / Three / exporter / observer 生命周期的私有组件里读取 `getToolSessionContext()`，而不是尝试自己操作顶层 tabs 或 workspace DOM。
-
-推荐基础结构（2D 预览工具）：
-
-```svelte
-<script lang="ts">
-  import { LeftPanel, PreviewCanvas, RightPanel, Section } from '$lib/components/shell/index.js';
-</script>
-
-<LeftPanel>
-  <Section title="Controls">
-    <!-- 参数区内容 -->
-  </Section>
-
-  <Section title="Advanced" collapsible>
-    <!-- 可折叠高级设置 -->
-  </Section>
-</LeftPanel>
-
-<RightPanel>
-  <PreviewCanvas contentWidth={640} contentHeight={360} label="Preview">
-    <!-- 预览内容 -->
-  </PreviewCanvas>
-</RightPanel>
-```
-
-推荐基础结构（全出血场景，如 WebGL/视频）：
-
-```svelte
-<script lang="ts">
-  import { LeftPanel, FullStage, RightPanel, Section } from '$lib/components/shell/index.js';
-</script>
-
-<LeftPanel>
-  <Section title="Controls">
-    <!-- 参数区内容 -->
-  </Section>
-</LeftPanel>
-
-<RightPanel>
-  <FullStage>
-    <!-- WebGL canvas 或全屏交互内容 -->
-  </FullStage>
-</RightPanel>
-```
-
-推荐基础结构（自由内容）：
-
-```svelte
-<script lang="ts">
-  import { LeftPanel, RightPanel, Section } from '$lib/components/shell/index.js';
-</script>
-
-<LeftPanel>
-  <Section title="Controls">
-    <!-- 参数区内容 -->
-  </Section>
-</LeftPanel>
-
-<RightPanel>
-  <!-- 任意自定义内容，无缩放/平移/棋盘格 -->
-</RightPanel>
-```
-
-注意：`LeftPanel` 已经自动包含 `MainInfo`。它会从 `metadata.json` 读取 title 和 desc，所以你不需要也不应该在左侧顶部再写一次标题和描述。
-
-### `components/`
-
-`components/` 是当前 tool 的私有子组件目录。适合放这里的内容包括：
-
-- 参数输入组，例如宽高输入、颜色输入、开关组
-- 预设选择器，例如 preset grid、ratio picker
-- 预览片段，例如静态 frame、卡片预览、导出预览
-- 运行时宿主，例如 canvas host、WebGL host、SVG stage
-- 局部状态块，例如统计区、空态块
-
-不适合放进这里的内容包括：
-
-- 准备在多个 tool 之间复用的基础 UI 原语
-- 和其他 tool 互相 import 的公共组件
-- 额外的 root-level 入口组件
-
-## 完整创建步骤
-
-### 第一步：确定 `tool-id` 和显示名
-
-先定两个名字：
-
-- 目录 id：kebab-case，例如 `frame-label`
-- 用户可见名称：英文名称，例如 `Frame Label`
-
-`tool-id` 会成为 hash route id，所以定了就不要随意改。
-
-### 第二步：建立目录骨架
-
-```text
-src/tools/frame-label/
-├── metadata.json
-├── index.ts
-├── FrameLabel.svelte
-└── components/
-```
-
-### 第三步：填写 `metadata.json`
-
-```json
-{
-  "name": "Frame Label",
-  "desc": "Add a short label to a fixed-size preview frame.",
-  "tag": ["example", "starter", "preview"],
-  "version": "1.0.0",
-  "enabled": true
+assets: {
+  initMap: { kind: 'image', label: 'Init Map', accept: ['image/*'], required: false }
 }
 ```
 
-### 第四步：编写 `index.ts`
-
-如果 tool 不需要 heavy tech stack：
+Container 侧读取（Web 交付 blob URL；Desktop 交付 `deshelf-cache://` opaque URL——真实文件路径永不进入 Tool）：
 
 ```ts
-import metadata from './metadata.json';
-import type { ToolDefinition } from '$lib/tool-sdk/index.js';
-
-const definition = {
-  metadata,
-  loadComponent: () => import('./FrameLabel.svelte')
-} satisfies ToolDefinition;
-
-export default definition;
+const content = context.assets.values().initMap;
+if (content?.kind === 'blob-url') {
+  // content.url 可直接交给 <img>/fetch/Image
+}
 ```
 
-如果需要 Three.js：
+- 订阅 `context.assets.subscribe(...)` 获得变更；`asset.request`/`requestAsset(id)` 拉取当前内容。
+- Web 上 Tool 也可以通过 `context.setParameter(...)` 回写 Parameter（例如"选了图自动切到 image 模式"）——它仍然经过 Host Store 校验与广播。
 
-```ts
-import metadata from './metadata.json';
-import type { ToolDefinition } from '$lib/tool-sdk/index.js';
+## Visual Output
 
-const definition = {
-  metadata,
-  techStack: ['three'],
-  loadComponent: () => import('./ThreeScene.svelte')
-} satisfies ToolDefinition;
+见 [export.md](./export.md)。要点：`outputs` named map 声明 descriptor（进 Catalog），`render` 回调留在 Main artifact 并在 Container 内执行；禁止 Canvas mount 后 runtime 注册 exporter。
 
-export default definition;
-```
-
-### 第五步：编写 master `.svelte`
-
-直接参考本指南顶部的最小示例，或者复制 `src/tools/hello-world/` 作为起点。
-
-### 第六步：拆分私有子组件
-
-如果逻辑开始变复杂，或者预览和控制逻辑开始耦合，就把相关部分移进 `components/`。
-
-### 第七步：运行构建验证
-
-```bash
-npm run build
-```
-
-构建通过就意味着 tool 已经自动出现在 catalog 里了。
-
-## 选择右侧呈现模式
-
-工具可以从三种右侧面板呈现模式中选择：
-
-| 模式 | 适用场景 | 提供的能力 |
-| --- | --- | --- |
-| `PreviewCanvas` | 固定尺寸的 2D 内容预览 | 缩放/适配/平移、棋盘格背景、工具栏、DPR 归一化缩放语义 |
-| `FullStage` | WebGL、视频、全屏交互 | 全出血容器，工具自行管理全部交互 |
-| 自由内容 | 列表、表格、文档等 | 无框架预设，完全自定义 |
-
-## 接入 PreviewCanvas
-
-`PreviewCanvas` 是 framework 提供的可选 2D 预览舞台。它内置了 Fit、1:1、缩放和平移功能。适用于有明确宽高的固定画布内容，尤其是 DOM 预览、图像预览和轻量 raster surface。
-
-基础用法：
-
-```svelte
-<RightPanel>
-  <PreviewCanvas contentWidth={640} contentHeight={360} label="Card Preview">
-    <div class="my-preview">
-      <!-- 你的预览内容 -->
-    </div>
-  </PreviewCanvas>
-</RightPanel>
-```
-
-关键 props：
-
-| Prop | 类型 | 说明 |
-| --- | --- | --- |
-| `contentWidth` | `number` | 逻辑内容宽度，单位 px |
-| `contentHeight` | `number` | 逻辑内容高度，单位 px |
-| `label` | `string` | 工具栏左侧的英文标签 |
-| `defaultZoom` | `'Fit' \| '1:1'` | 可选，定义预览首次打开时的默认缩放模式；默认 `Fit` |
-| `actions` | `Snippet` | 可选，在工具栏缩放控制后渲染额外控件 |
-| `footerInfo` | `PreviewCanvasFooterInfo` | 可选，在画布框外右下角渲染外置信息块（固定 20em） |
-
-约束：
-
-- 子内容默认占满 `100%` 宽高
-- 缩放、平移、Fit 和 1:1 交给 `PreviewCanvas`
-- `PreviewCanvas` 会以视口中心作为内容定位基线，即使内容尺寸大于可视区域也保持中心参考系
-- `1:1` 和工具栏缩放百分比按“1 内容像素 = 1 设备像素”解释，不等同于原始 CSS scale
-- 对 `canvas`、`img` 等 raster 内容，`PreviewCanvas` 会提供 pixelated 呈现基线
-- 预览外框由 `PreviewCanvas` 统一提供；除非明确需要嵌套画面，不要在子内容根元素再定义一层外边框
-- 预览内容区默认不可选中文本，防止拖拽平移和缩放过程中出现误选高亮；如确有需要请在 tool 内显式覆盖
-- 外置信息块（`footerInfo`）渲染在画布框外右下角，位置会随画布平移与缩放后的框体变化同步更新
-- 外置信息块固定宽度为 `20em`，单行溢出显示省略号，hover 时显示全文 tooltip
-- 外置信息块最多 5 行：首行仅支持 `IconOnly`、`IconAndTitle`、`TitleOnly`；其余行仅支持纯文本
-- 超限输入采用静默裁剪，不会抛出运行时错误或告警
-- 不要在子内容里再造一套预览工具栏
-
-如果你希望预览首次打开时直接进入设备像素归一化后的实际尺寸，可以显式传入 `defaultZoom="1:1"`：
-
-```svelte
-<PreviewCanvas
-  contentWidth={320}
-  contentHeight={320}
-  label="Sprite Preview"
-  defaultZoom="1:1"
->
-  <img src={spriteUrl} alt="Sprite" />
-</PreviewCanvas>
-```
-
-如果工具需要自己控制 renderer backing store、WebGL viewport 或 Pixi / Three 的实际渲染分辨率，不要把这些职责塞进 `PreviewCanvas`。这种场景应继续使用 `FullStage`，由工具自己管理 `devicePixelRatio`、`setPixelRatio` 或其他 renderer 级逻辑。
-
-如果需要在工具栏中添加自定义控件（例如网格开关），使用 `actions` snippet：
-
-```svelte
-<PreviewCanvas contentWidth={640} contentHeight={360} label="Layout Preview">
-  {#snippet actions()}
-    <Button variant="ghost" size="sm" onclick={toggleGrid}>Grid</Button>
-  {/snippet}
-  <div class="my-preview"><!-- 内容 --></div>
-</PreviewCanvas>
-```
-
-如果需要在画布外右下角显示状态信息，优先使用 helper 构造 `footerInfo`：
+## Canvas 与 Slate
 
 ```svelte
 <script lang="ts">
-  import {
-    createPreviewCanvasFooterInfo,
-    footerBodyLine,
-    footerHeaderIconAndTitle,
-    PreviewCanvas,
-    RightPanel
-  } from '$lib/components/shell/index.js';
+  import { onMount } from 'svelte';
+  import type { ContainerSurfaceContext } from 'tool-sdk';
 
-  const footerInfo = createPreviewCanvasFooterInfo({
-    header: footerHeaderIconAndTitle('info-box', 'Preview Info'),
-    lines: [
-      footerBodyLine('Seed: 9812'),
-      footerBodyLine('Scale: 0.75'),
-      footerBodyLine('This line is intentionally long and will be truncated with ellipsis.')
-    ]
+  let { context }: { context: ContainerSurfaceContext } = $props();
+
+  onMount(() => {
+    // rAF、GPU context、simulation state 全部留在这里
+    return () => { /* dispose */ };
   });
 </script>
-
-<RightPanel>
-  <PreviewCanvas
-    contentWidth={512}
-    contentHeight={512}
-    label="Noise Preview"
-    {footerInfo}
-  >
-    <div class="noise-preview"></div>
-  </PreviewCanvas>
-</RightPanel>
 ```
 
-## 接入 FullStage
+- `context` 提供：`sessionId`、`surface()`/`onSurface`、`parameters` mirror、`assets` mirror、`setParameter`、`requestAsset`、`reportDiagnostic`。
+- Surface 尺寸由 Host 发送 `surface.resize`；Canvas 元素的 CSS 自适应容器，backing store 尺寸由 Tool 决定。
+- Slate 与 Main 不共享 JavaScript realm：跨 Surface 协作只能通过 Host Parameter Store 与 Tool Command。
+- Tool Slate 失败不阻塞 Canvas Ready，但会产生 Surface diagnostic。
 
-`FullStage` 是 framework 提供的最小化全出血容器。适用于 WebGL 渲染器、视频播放器或任何需要占满整个右侧面板区域的场景。
+### 样式
 
-FullStage 不提供缩放控制、工具栏或背景装饰——工具自行管理一切。
+- 只用 Svelte scoped CSS；单位一律 px。
+- Container realm **没有** Host 的 `app.css`：使用 `var(--token, fallback)` 形式给共享 token 提供 fallback，或直接写 px 值。
+- Svelte 编译只接受 TS 语法子集（类型标注）；不要在 `<script lang="ts">` 里用需要预处理的特性。
 
-基础用法：
+## Framework Libraries
 
-```svelte
-<RightPanel>
-  <FullStage>
-    <MyWebGLViewport />
-  </FullStage>
-</RightPanel>
-```
-
-关键特性：
-
-- `flex: 1` 填满整个右侧面板
-- `overflow: hidden` 防止内容溢出
-- `position: relative` 支持绝对定位子元素（如悬浮 HUD）
-- 不做任何视觉装饰
-
-对于 WebGL 或 canvas 宿主，推荐方式是在 `FullStage` 内部渲染一个占满的宿主元素，用 `ResizeObserver` 监听尺寸，再把渲染器绑定到宿主 DOM。完整参考见 `src/tools/three-cube/components/CubeViewport.svelte`。
-
-## 使用 Heavy Tech Stack
-
-当 tool 需要用到 Three.js、Pixi.js 或 GSAP 时，有一套固定流程必须遵守。
-
-顶层页面的装载顺序是：
-
-1. 调用 `loadToolDefinition(activeToolId)`
-2. 读取 `definition.techStack`
-3. 调用 `loadTechStacks(definition.techStack)`
-4. 调用 `definition.loadComponent()`
-5. 在 `ToolShell` 内挂载组件
-
-这意味着，只要在 `index.ts` 中声明了 `techStack`，framework 就会先把对应 heavy 依赖预热好，再挂载组件。
-
-第一步，在 `index.ts` 中声明：
+`manifest.libraries` 只能声明 `three | pixi | gsap | vgpu`。声明后：
 
 ```ts
-const definition = {
-  metadata,
-  techStack: ['three'],
-  loadComponent: () => import('./ThreeCube.svelte')
-} satisfies ToolDefinition;
+import * as THREE from 'three';   // bare import 保留为 external
 ```
 
-第二步，在组件内部通过 shared loader 获取：
+Forge 会把库编译为 import map 供给（Web 与 Desktop 同一套机制），多个 Tool 共享同一 runtime 实例。Tool **永不自带**库的拷贝。
 
-```ts
-import { loadTechStack } from '$lib/tool-sdk/index.js';
+## Container 内共享状态
 
-const THREE = await loadTechStack('three');
+Canvas、private callback、Command 与 Output 回调运行在同一个 Container realm，但不在同一个组件作用域。推荐模式（shallow-water 即如此）：
+
+1. `createRuntime(context)` 工厂集中每 Session 的 state 与 dispose，由 Canvas mount/unmount 驱动；
+2. 一个 realm 级 holder 把 runtime 暴露给 entry 侧回调（`outputs.render`、`privateCallbacks.run`）。Realm 每次 Reload/Restart 都会重建，因此天然按 Session 隔离，不构成全局注册。
+3. 未挂载时回调必须显式失败（如 `throw new Error('simulation canvas is not mounted')`），不要静默返回空结果。
+
+## 构建与验证
+
+```bash
+bun run forge:web-catalog   # 扫描 tools/ → 构建 → 生成 static/deshelf/catalog.json
+bun run dev                 # 开发服务器（自动生成 Catalog）
+bun test                    # 全量测试（packages + tools + forge + desktop）
+bun run typecheck           # packages + apps/desktop
+bun run build               # 生产构建（含 Catalog 生成）
+bun run smoke:web-adapter   # 真实浏览器冒烟（需要本机 Chrome/Edge）
 ```
 
-loader 内部带缓存，因此顶层预加载和组件内调用都是安全的。不要直接把 heavy dependency 接进共享 shell 层，也不要绕过 loader 另起一套缓存。
-
-## 使用统一文件输入管道
-
-如果 tool 需要导入本地图像、影片或文字文件，默认入口是 `$lib/tool-sdk/index.js` 中的 source workflow facade 与共享 IO UI，不要在工具内部重复造一套文件选择、类型判定、文本读取、拖放解析和对象 URL 清理逻辑。底层 `file-input` pipeline 仍作为 escape hatch 保留；只有当 `createToolSourceInput` 无法表达特殊流程时，才使用 SDK 暴露的 `createFileInputController`、`readFileInputItem`、`extractDroppedFiles` 等低层能力。
-
-统一管道的基本约束：
-
-- 由 `createFileInputController({ allowedKinds })` 创建控制器
-- picker 与 drop 都必须走同一个 `ingestFiles(...)` 入口
-- 隐藏文件输入元素的 `accept` 使用控制器暴露的 `accept`
-- 图像 / 影片对象 URL 的生命周期由 runtime 持有，tool 只消费 `currentItem`
-- 导入失败时保留最近一次成功结果，不要自己手动清空
-
-完整用法见 `./file-input.md`。当工具涉及本地文件导入时，应先读那份指南再设计交互。
-
-## Bits UI 约束
-
-交互型基础组件默认优先使用共享包装。只有在共享 UI 层还没有对应组件，或者该交互非常 tool-specific 时，才建议在私有组件里直接使用 Bits UI。
-
-即便直接使用，也必须遵守下面两条。
-
-### delegated element 必须完整透传 `props`
-
-```svelte
-{#snippet child({ props })}
-  <button {...props} class="my-button">
-    Click me
-  </button>
-{/snippet}
-```
-
-不要只挑部分属性透传，也不要丢掉事件、ARIA、ref 等 Bits UI 注入属性。
-
-### 浮动内容必须保留双层结构
-
-对 dropdown、popover、dialog 这类浮动内容，必须保留：
-
-- 外层 `...wrapperProps`
-- 内层 `...props`
-
-并且视觉样式只写在内层，不写在外层。
-
-```svelte
-{#snippet child({ wrapperProps, props, open })}
-  {#if open}
-    <div {...wrapperProps}>
-      <div {...props} class="dropdown-menu__content">
-        <!-- styled content -->
-      </div>
-    </div>
-  {/if}
-{/snippet}
-```
-
-## 组织 master `.svelte` 的建议
-
-左侧参数区推荐按这个顺序排布：
-
-1. 核心输入
-2. 常用预设
-3. 派生结果或当前状态
-4. 高级设置
-5. 辅助说明
-
-优先使用共享布局组件：
-
-- `LeftPanel`
-- `Section`
-
-如果需要交互控件，优先使用共享 UI 包装：
-
-- `Button`
-- `Dialog`
-- `DropdownMenu`
-- `Collapsible`
-- `Tabs`
-
-当前可直接复用的共享类来自 `src/app.css`：
-
-- `.pixel-input`
-- `.pixel-chip`
-- `.pixel-frame`
-- `.pixel-scrollbar`
-- `.pixel-checkerboard`
-
-样式约束：
-
-- 统一使用 CSS Custom Properties
-- 间距、字号、边框一律使用 px 单位
-- 不使用 Tailwind class，不使用 rem-based 体系
-
-推荐用 tool id 作为 CSS 类名前缀，避免不同 tool 的样式碰撞：
-
-```css
-.frame-label__field { ... }
-.frame-label__preview { ... }
-.frame-label__badge { ... }
-```
-
-### `menuActions` 的位置
-
-`menuActions` 会显示在 `MainInfo` 的菜单中，但目前顶层 runtime 还没有把 action 回调交还给 tool。可以把它当成展示层预留位，但核心交互仍应放在左侧参数区或右侧预览区。
-
-## 禁止事项
-
-新增 tool 时，以下行为一律不允许：
-
-- 在 master `.svelte` 里重写 workspace shell，例如 header、tabs、settings、help、about
-- 在 `metadata.json` 中放 runtime 逻辑，例如 `techStack`、`loadComponent`、组件路径
-- 在工具根目录放多个 `.svelte`
-- 未在 `index.ts` 声明 `techStack` 就直接使用 `three`、`pixi` 或 `gsap`
-- 对本地图像、影片或文字输入自行实现第二套 picker / drop / 对象 URL 管理逻辑
-- 使用 Tailwind utility class 或重新引入 Tailwind 依赖
-- 使用 rem-based 自适应体系替代当前 px + CSS Custom Properties 体系
-- 在共享 UI 文案中写中文
-- 在 tool 内单独实现 `<720px` 视口 fallback
-- 手动修改 registry 文件来注册 tool
-
-## 常见错误
-
-### 把 shell 写进 tool
-
-错误表现：在 master `.svelte` 里写了一层 header，或者自己实现了 tabs、workspace grid。
-
-正确做法：tool 只渲染 `<LeftPanel>` 和 `<RightPanel>` 内的内容，顶层壳层完全交给 framework。
-
-### 在 `metadata.json` 放 runtime 字段
-
-错误表现：
-
-```json
-{
-  "name": "My Tool",
-  "techStack": ["three"],
-  "loadComponent": "./MyTool.svelte"
-}
-```
-
-正确做法：`metadata.json` 只保留静态字段：`name`、`desc`、`tag`、`version`，以及可选的 `enabled`；其余都放在 `index.ts`。
-
-### 使用 `enabled: false` 的语义
-
-错误理解：把 `enabled: false` 当成“只是不在工具架显示”。
-
-正确语义：`enabled: false` 是硬开关。工具会同时从工具架、合法 tool id 集合、hash 路由激活和本地持久化恢复中被排除。
-
-### 根目录放多个 `.svelte`
-
-错误表现：
-
-```text
-src/tools/my-tool/
-├── MyTool.svelte
-├── Preview.svelte
-├── Controls.svelte
-├── metadata.json
-└── index.ts
-```
-
-正确做法：
-
-```text
-src/tools/my-tool/
-├── MyTool.svelte
-├── metadata.json
-├── index.ts
-└── components/
-    ├── Preview.svelte
-    └── Controls.svelte
-```
-
-### 使用 heavy dependency 但没声明 `techStack`
-
-错误表现：
-
-```ts
-import * as THREE from 'three';
-```
-
-正确做法：
-
-1. 在 `index.ts` 声明 `techStack: ['three']`
-2. 在组件内通过 `loadTechStack('three')` 获取模块
-
-### 忘记 `LeftPanel` 已自带 `MainInfo`
-
-错误表现：左侧顶部又手写了一块标题、描述和菜单，元数据重复出现两份。
-
-正确做法：只写自己的 `Section` 内容；要改标题或描述，就去改 `metadata.json`。
-
-### Bits UI child snippet 没有完整透传
-
-错误表现：`props` 只传了一部分，或者浮层内容丢掉了 `wrapperProps`，或者把视觉样式写在了外层 wrapper 上。
-
-正确做法：delegated element 完整透传 `...props`；浮层保留 `wrapperProps + props` 双层；外层不承载视觉样式。
-
-### 忘记 `export default`
-
-错误表现：`index.ts` 定义了 `definition` 却没有 `export default definition`，导致 runtime 加载不到合法 definition。
-
-正确做法：文件末尾必须 `export default definition`。
-
-## 开发完成后的自检清单
-
-- [ ] 目录名使用 kebab-case，可直接作为 runtime id 和 hash route id
-- [ ] 根目录只有一个 master `.svelte`
-- [ ] 所有其他私有 `.svelte` 都放在 `components/`
-- [ ] `metadata.json` 只包含静态字段：`name`、`desc`、`tag`、`version`，以及可选 `enabled`
-- [ ] `metadata.json` 中所有文案均为英文
-- [ ] `index.ts` 使用 `satisfies ToolDefinition`
-- [ ] `index.ts` 末尾有 `export default definition`
-- [ ] `loadComponent` 使用懒加载，而不是顶部 import
-- [ ] 若使用 `three`、`pixi` 或 `gsap`，已在 `index.ts` 声明 `techStack`
-- [ ] heavy dependency 通过 `loadTechStack` 获取，没有直接接进共享 shell
-- [ ] 若工具需要本地图像、影片或文字输入，已通过 `$lib/tool-sdk/index.js` 的 source input / file input 能力接入而不是自写浏览器文件管道
-- [ ] master `.svelte` 没有重复写 workspace shell
-- [ ] `LeftPanel` 中没有重写 `MainInfo`
-- [ ] 右侧预览接入了 `PreviewCanvas`
-- [ ] `contentWidth` 和 `contentHeight` 使用了真实逻辑尺寸
-- [ ] 样式只使用 CSS Custom Properties 和 px 单位，没有 Tailwind class
-- [ ] 如使用 Bits UI child snippet，已完整透传 `props`
-- [ ] 如使用浮动层，已保留 `wrapperProps + props` 双层结构
-- [ ] 执行 `npm run build` 通过
-
-## 附录：运行时发现机制
-
-`src/lib/runtime/tool-registry.ts` 中当前采用两段式发现：
-
-```ts
-const metadataModules = import.meta.glob('/src/tools/*/metadata.json', { eager: true });
-const definitionModules = import.meta.glob('/src/tools/*/index.ts');
-```
-
-这种分离设计的结果是：
-
-- 打开 Open Tool 列表时不需要加载任何组件代码，catalog 只依赖静态 JSON
-- 选中某个 tool 时，才真正加载它的 `index.ts`、tech stack 和组件
-- `tool-id` 直接从目录路径中提取，不需要额外注册
-
-一个 tool 能被 runtime 自动发现，必须同时满足三条：
-
-1. 目录位于 `src/tools/<tool-id>/`
-2. 目录下存在 `metadata.json`
-3. 目录下存在 `index.ts`，并导出合法的 `ToolDefinition`
-
-满足这三条，tool 就会自动出现在 workspace 的 Open Tool 列表中。
+- 构建失败的 Tool Project **不会进入可用 Catalog**，只以 failures + diagnostics 上报；先修 diagnostics 再迭代。
+- Desktop 验证：`bun run dev:desktop` → Open Project 选择 Tool Project 目录；构建成功后会写回 `.deshelf/` IDE 声明（这是对工程唯一的写回）。
+- 失败诊断代码常见于 `manifest/*`、`extract/*`、`inspector/*`、`build/*`，信息里带 path。
+
+## 规则清单
+
+- [ ] 根目录只有 `manifest.json` + `index.ts` 两个登记点。
+- [ ] `index.ts` 顶层无副作用，Canvas/Slate 动态 import。
+- [ ] 私有回调全部走 `privateCallbacks` named map，无 inline anonymous handler。
+- [ ] Parameter constraint 完整；computed 有 `compute` + `dependsOn`。
+- [ ] Inspector 用 typed handle 绑定；条件显示用 `visibleWhen`。
+- [ ] 声明的 `libraries` 与实际 bare import 一致。
+- [ ] `dispose()` 清理模块级状态；Canvas 卸载释放 GPU/URL 资源。
+- [ ] `bun run forge:web-catalog` 通过且 entry 出现在 Catalog。

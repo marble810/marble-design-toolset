@@ -1,99 +1,31 @@
-# 脚手架与 Recipes
+# Tool Project 脚手架与 Forge 流水线
 
-## 脚手架入口
+> 迁移期说明：旧的 `scripts/create-tool.js`、`scripts/tool-scaffold/`（生成 Tool-owned panels/runtime contexts 的 recipe 模板）与 `scripts/tool-contract/validate.mjs`（regex 校验 `metadata.json` 与 master Svelte）已随旧 runtime 删除。新脚手架事实标准是共享 `tool-builder` 流水线与参考 Tool Project。
 
-```bash
-bun run create:tool
-# 等价于
-node scripts/create-tool.js
-```
+## 参考实现
 
-脚手架收集 tool name 和 capability recipe，生成符合 contract 的 `src/tools/<tool-id>/` 目录。
-
-## 目录结构
-
-```
-scripts/
-├── create-tool.js              ← CLI 入口（交互式提问）
-├── tool-contract/
-│   ├── validate.mjs            ← Tool schema + boundary import validation
-│   └── validate.test.mjs
-└── tool-scaffold/
-    ├── index.js                ← Recipe 选择 + 选项收集逻辑
-    ├── scaffold.test.mjs       ← 脚手架集成测试
-    └── templates/
-        └── index.js            ← 各 recipe 的代码模板
-```
-
-## Recipe 列表
-
-| Recipe | 描述 |
+| 工程 | 角色 |
 |---|---|
-| `preview-basic` | `LeftPanel` + `RightPanel` + `PreviewCanvas`；纯 DOM/SVG/Canvas 起步 |
-| `source-preview` | `createToolSourceInput` + `SourceInputSection` + `DropZone` + 预览占位 |
-| `pixi-preview` | `techStack: ['pixi']`、`createRenderHostLifecycle()` + `createPixiApplicationHost()` |
-| `three-stage` | `techStack: ['three']`、`FullStage`、`createThreeRenderHost()` + animation loop |
-| `preview-export` | `metadata.json export` 声明 + `createCanvas2DRenderHost()` + exporter 注册 |
-| `layout-template` | `createLayoutToolController()`、多 source slots、Google Fonts / uploaded font、DOM 导出接线 |
-| `custom` | 手动选择 preview/stage 和 tech stack 的空白 starter |
+| `tools/hello-canvas/` | 最小可运行样例：Parameter、computed、Command、private callback、Canvas + Slate、一个 image output |
+| `tools/shallow-water/` | 完整迁移样本：GPU simulation 热路径、Asset Slot、Inspector `visibleWhen`、确定性 PNG/视频 Visual Output |
+| `packages/tool-builder/fixtures/projects/` | 流水线 fixture（valid / with-slate / throwing / hanging），支撑 extraction 与 catalog 测试 |
 
-## 添加新 Recipe
+新 Tool Project 的创建方式是**复制参考实现并裁剪**，然后按 [Tool developer 指南](../for-tool-developers/create-a-tool.md) 逐项核对登记点。不再存在生成 `metadata.json` + master Svelte 的脚手架 CLI。
 
-1. 在 `scripts/tool-scaffold/index.js` 的 recipe 列表中添加新选项：
-   ```js
-   { value: 'my-recipe', label: 'My Recipe', hint: '适用场景说明' }
-   ```
+## 共享构建流水线
 
-2. 在 `scripts/tool-scaffold/templates/index.js` 中实现模板生成函数：
-   ```js
-   function generateMyRecipe({ toolId, componentName, pascalName }) {
-     return {
-       'metadata.json': JSON.stringify({ /* ... */ }, null, 2),
-       'index.ts': `import metadata from './metadata.json';\n// ...`,
-       [`${pascalName}.svelte`]: `<script lang="ts">\n// ...`,
-       'components/MyCanvas.svelte': `<script lang="ts">\n// ...`
-     };
-   }
-   ```
+所有 Tool 构建（Web 静态 Catalog 与 Desktop Open Project）都走 `packages/tool-builder` 的 `buildToolProject`：
 
-3. 在 `index.js` 的 `generateToolFiles()` 中处理新 recipe case。
-
-**模板约定：**
-- 模板必须使用 public SDK imports（`$lib/tool-sdk/index.js`、`$lib/components/shell/index.js`、`$lib/components/ui/index.js`），不使用 internal 路径。
-- 模板生成的 tool 必须能通过 contract validation。
-- 只生成最小可运行的 wiring，不内联过多业务示例。
-
-## Contract Validation
-
-`scripts/tool-contract/validate.mjs` 验证：
-
-1. **Schema validation**：每个 `src/tools/<id>/` 必须有 `metadata.json`、`index.ts`、恰好一个 root-level `.svelte`。
-2. **Boundary validation**：工具代码不能直接 import `DISALLOWED_TOOL_IMPORTS` 中的 internal 路径。
-
-脚手架测试（`scaffold.test.mjs`）验证每个 recipe 生成的代码都能通过 contract validation：
-
-```bash
-npm run test   # 包含 scaffold 测试
+```text
+读 manifest.json → 编译 index.ts + Canvas/Slate（Vite + Svelte，声明库 external）
+  → 受控 extraction worker（terminable + timeout）求值 Tool Entry
+  → 执行 descriptor-only createInspector → 校验 named-map bindings
+  → 生成 Catalog Entry（确定性、无时间戳）→ upsert CatalogStore
 ```
 
-### 更新 DISALLOWED_TOOL_IMPORTS
+维护要点：
 
-当某个 internal 路径不应被 tool 访问时，在 `validate.mjs` 的 `DISALLOWED_TOOL_IMPORTS` 中添加：
-
-```js
-const DISALLOWED_TOOL_IMPORTS = [
-  '$lib/runtime/canvas-export/context',
-  // 新增路径...
-];
-```
-
-同时更新 `ALLOWED_LEGACY_IMPORTS` 处理已有的历史兼容路径（注意不要把需要逐步迁移的路径也加入 disallowed）。
-
-## 运行脚手架测试
-
-```bash
-npm run test
-# 或者只运行 scaffold 相关
-node --test scripts/tool-scaffold/scaffold.test.mjs
-node --test scripts/tool-contract/validate.test.mjs
-```
+- 编译 externals 由 `isFrameworkLibraryImport`（`pipeline.ts`）决定：`svelte*` 恒外置，`manifest.libraries` 声明的库（含子路径）外置，其余 bare import 打进 artifact。
+- Extraction worker 在独立进程加载**编译产物**，绝不执行 Canvas/GPU；inline anonymous private callback 与非法 binding 在这里失败。
+- `.deshelf/` IDE 声明与 schema 是 Desktop 构建成功后的唯一写回（`apps/desktop/src/main/declarations.ts`）。
+- 新增 contract 字段（例如 Inspector `visibleWhen`）时，同步更新：`tool-contract` 校验、`tool-sdk` builder、`tool-host` InspectorHost 视图模型、Web `ForgeInspector` 与 Desktop `inspector-dom` 两个渲染端，以及 fixtures 测试。

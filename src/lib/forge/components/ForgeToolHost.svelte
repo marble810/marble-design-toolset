@@ -14,13 +14,21 @@
 	import { WebToolController, type WebToolExportResult } from '$lib/forge/web/web-tool-controller.js';
 	import ForgeInspector from './ForgeInspector.svelte';
 
+	/** Reload source resolved by the app: the staged replacement Entry + its artifact. */
+	export interface ReloadSource {
+		entry: CatalogEntry;
+		mainArtifactUrl: string;
+	}
+
 	interface Props {
 		entry: CatalogEntry;
 		/** Absolute URL of the static catalog.json used to resolve artifact references. */
 		catalogUrl: string;
+		/** Resolves the staged reload replacement; omit to hide the Reload control. */
+		resolveReload?: (current: CatalogEntry) => Promise<ReloadSource | { error: string }>;
 	}
 
-	let { entry, catalogUrl }: Props = $props();
+	let { entry, catalogUrl, resolveReload }: Props = $props();
 
 	let canvasHost = $state<HTMLElement | undefined>(undefined);
 	let slateHost = $state<HTMLElement | undefined>(undefined);
@@ -37,10 +45,44 @@
 	const stateLabel = $derived(
 		state === 'Ready' && health === 'Unresponsive' ? 'Ready · Unresponsive' : state
 	);
-	const showRestart = $derived(state === 'Failed' || health === 'Unresponsive');
+	// Restart is the recovery path for Failed/Unresponsive and a plain "reboot" affordance
+	// on Ready; Reset Defaults lives next to it.
+	const showRestart = $derived(state === 'Ready' || state === 'Failed' || health === 'Unresponsive');
+	const showReload = $derived(state === 'Ready' && resolveReload !== undefined);
 
 	function noteDiagnostic(diagnostic: Diagnostic): void {
 		diagnostics = [...diagnostics.slice(-19), diagnostic];
+	}
+
+	let reloadMessage = $state('');
+	let reloading = $state(false);
+
+	/** Staged Reload: the old Session stays active until the replacement Canvas is Ready. */
+	async function reload(): Promise<void> {
+		// Capture before awaiting: the host may unmount mid-flight and clear the state
+		// reference, but the captured controller instance stays valid to settle.
+		const active = controller;
+		if (active === undefined || reloading || resolveReload === undefined) return;
+		reloading = true;
+		reloadMessage = '';
+		try {
+			const source = await resolveReload(entry);
+			if ('error' in source) {
+				reloadMessage = source.error;
+				return;
+			}
+			const result = active.reload({ entry: source.entry, mainArtifactUrl: source.mainArtifactUrl });
+			if (result.ok) {
+				reloadMessage = 'replacement staged — old session stays active until Ready';
+			} else {
+				reloadMessage = `reload rejected: ${result.diagnostic?.code ?? 'unknown'}`;
+				if (result.diagnostic !== undefined) noteDiagnostic(result.diagnostic);
+			}
+		} catch (err) {
+			reloadMessage = err instanceof Error ? err.message : String(err);
+		} finally {
+			reloading = false;
+		}
 	}
 
 	function resolveContainerPageUrl(mainArtifactUrl: string): string {
@@ -62,6 +104,9 @@
 				sessionId = controller !== undefined ? controller.session.sessionId : '';
 			},
 			onHealthChange: (next) => (health = next),
+			// Reload commit swaps the Session without a state transition — re-key the
+			// Session-bound Inspector view here.
+			onSessionIdChange: (next) => (sessionId = next),
 			onDiagnostic: noteDiagnostic
 		});
 		controller.open();
@@ -103,7 +148,8 @@
 		if (result.ok && result.content?.kind === 'blob-url') {
 			const anchor = document.createElement('a');
 			anchor.href = result.content.url;
-			anchor.download = `${entry.slug}-${outputId}.${(result.content.mime.split('/')[1] ?? 'bin').split('+')[0]}`;
+			const mimeSubtype = result.content.mime.split(';')[0].split('/')[1] ?? 'bin';
+			anchor.download = `${entry.slug}-${outputId}.${mimeSubtype.split('+')[0]}`;
 			anchor.click();
 			exportMessage = `${outputId} exported`;
 		} else if (result.ok) {
@@ -124,10 +170,13 @@
 		<div class="forge-host__status" data-state={stateLabel}>
 			<span>{stateLabel}</span>
 			{#if showRestart}
-				<button type="button" class="forge-host__restart" onclick={restart}>Restart Tool</button>
+				<button type="button" class="forge-host__restart" data-action="restart" onclick={restart}>Restart Tool</button>
+			{/if}
+			{#if showReload}
+				<button type="button" class="forge-host__restart" data-action="reload" disabled={reloading} onclick={reload}>Reload</button>
 			{/if}
 			{#if state === 'Ready'}
-				<button type="button" class="forge-host__restart" onclick={resetDefaults}>Reset Defaults</button>
+				<button type="button" class="forge-host__restart" data-action="reset" onclick={resetDefaults}>Reset Defaults</button>
 			{/if}
 		</div>
 	</header>
@@ -168,6 +217,9 @@
 				{#if exportMessage !== ''}
 					<div class="forge-host__note">{exportMessage}</div>
 				{/if}
+			{/if}
+			{#if reloadMessage !== ''}
+				<div class="forge-host__note">{reloadMessage}</div>
 			{/if}
 		</aside>
 	</div>
@@ -235,6 +287,10 @@
 		font-family: var(--font-family-base);
 		font-size: var(--font-size-1);
 		cursor: pointer;
+	}
+	.forge-host__restart:disabled {
+		opacity: 0.5;
+		cursor: default;
 	}
 	.forge-host__restart:hover {
 		border-color: var(--color-border-focus);

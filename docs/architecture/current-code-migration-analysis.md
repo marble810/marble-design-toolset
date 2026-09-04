@@ -1,6 +1,7 @@
 # 现有代码迁移分析
 
 > 状态：MAB-65 目标 architecture 的 implementation map。本文回答“当前代码保留、改写、移动还是删除”，不把迁移前 implementation 提升为新 contract。
+> **更新（MAB-70 完成后）**：Slice 0–7 已全部落地——Shallow Water 迁移到 `tools/shallow-water/`，根 Workspace 切到 Catalog-driven Host，旧 registry/contexts/panels/scaffold 与其他 Visual Tools 已删除；§3 的 disposition 表保留为历史决策记录。
 
 ## 1. 结论
 

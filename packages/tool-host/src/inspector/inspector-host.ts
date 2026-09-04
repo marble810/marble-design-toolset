@@ -8,7 +8,7 @@
  * controls merge pointer input through the store (`update` + app-driven `flush`), so
  * pointer events never cross the Environment API.
  */
-import type { Diagnostic, InspectorBinding, InspectorElement, InspectorTreeDescriptor } from 'tool-contract';
+import type { Diagnostic, InspectorBinding, InspectorElement, InspectorTreeDescriptor, InspectorVisibilityRule } from 'tool-contract';
 import { error, type ParameterValue } from 'tool-contract';
 import type { ParameterStore, ParameterSetResult } from '../parameter-store.ts';
 import type { CommandActionResult, CommandStatusEvent, CommandStatusKind } from '../command-runner.ts';
@@ -22,6 +22,8 @@ export interface InspectorNodeState {
 	title?: string;
 	value?: ParameterValue;
 	disabled?: boolean;
+	/** False when the element's `visibleWhen` rule does not match the current Store values. */
+	visible?: boolean;
 	running?: boolean;
 	result?: CommandStatusKind;
 	children?: InspectorNodeState[];
@@ -171,13 +173,14 @@ export class InspectorHost {
 		const element = node.element;
 		switch (element.kind) {
 			case 'label':
-				return { id: element.id, kind: 'label', label: '', text: element.text };
+				return { id: element.id, kind: 'label', label: '', text: element.text, visible: this.isVisible(element) };
 			case 'section':
 				return {
 					id: element.id,
 					kind: 'section',
 					label: '',
 					title: element.title,
+					visible: this.isVisible(element),
 					children: node.children.map((child) => this.toState(child))
 				};
 			case 'slider':
@@ -185,21 +188,31 @@ export class InspectorHost {
 			case 'select':
 			case 'text': {
 				const binding = element.binding;
-				if (binding.kind !== 'parameter') return { id: element.id, kind: element.kind, label: element.label };
+				if (binding.kind !== 'parameter')
+					return { id: element.id, kind: element.kind, label: element.label, visible: this.isVisible(element) };
 				const descriptor = this.options.store.descriptor(binding.parameterId);
 				return {
 					id: element.id,
 					kind: element.kind,
 					label: element.label,
 					value: this.options.store.get(binding.parameterId),
-					disabled: descriptor !== undefined && descriptor.mode === 'computed'
+					disabled: descriptor !== undefined && descriptor.mode === 'computed',
+					visible: this.isVisible(element)
 				};
 			}
 			case 'button': {
 				const running = this.isRunning(element.id);
-				return { id: element.id, kind: 'button', label: element.label, running, disabled: running };
+				return { id: element.id, kind: 'button', label: element.label, running, disabled: running, visible: this.isVisible(element) };
 			}
 		}
+	}
+
+	/** Evaluates the element's `visibleWhen` rule against the live Parameter Store. */
+	private isVisible(element: InspectorElement): boolean {
+		const rule = (element as { visibleWhen?: InspectorVisibilityRule }).visibleWhen;
+		if (rule === undefined) return true;
+		const value = this.options.store.get(rule.parameterId);
+		return Array.isArray(rule.equals) ? (rule.equals as readonly unknown[]).includes(value) : value === rule.equals;
 	}
 
 	private isRunning(elementId: string): boolean {

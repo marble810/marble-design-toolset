@@ -9,10 +9,11 @@
  * promise process- or failure isolation. Restart lives in the Host chrome
  * (`restart()` wired to the Failed/Unresponsive banner in the UI).
  */
-import type { AssetContent, CatalogEntry, Diagnostic } from 'tool-contract';
+import { error, type AssetContent, type CatalogEntry, type Diagnostic } from 'tool-contract';
 import {
 	ToolSession,
 	type DeshelfRuntimeConfig,
+	type ReloadHandle,
 	type ToolSessionHealth,
 	type ToolSessionState
 } from 'tool-host';
@@ -36,6 +37,7 @@ export interface WebToolControllerOptions {
 	revokeObjectUrl?: (url: string) => void;
 	onStateChange?: (state: ToolSessionState) => void;
 	onHealthChange?: (health: ToolSessionHealth) => void;
+	onSessionIdChange?: (sessionId: string) => void;
 	onDiagnostic?: (diagnostic: Diagnostic) => void;
 	/** Injectable element factory/observer for deterministic tests. */
 	documentRef?: Document;
@@ -52,6 +54,18 @@ export interface WebToolExportResult {
 	content?: AssetContent;
 }
 
+export interface WebToolReloadRequest {
+	/** The staged replacement Catalog Entry (e.g. re-resolved from a refreshed catalog). */
+	entry: CatalogEntry;
+	/** Pre-compiled Main artifact URL of the replacement entry. */
+	mainArtifactUrl: string;
+}
+
+export interface WebToolReloadResult {
+	ok: boolean;
+	diagnostic?: Diagnostic;
+}
+
 interface SurfaceSize {
 	width: number;
 	height: number;
@@ -62,14 +76,14 @@ const FALLBACK_SURFACE: SurfaceSize = { width: 640, height: 360 };
 export class WebToolController {
 	readonly session: ToolSession;
 
-	private readonly entry: CatalogEntry;
+	private entry: CatalogEntry;
 	private readonly canvasHost: HTMLElement;
 	private readonly slateHost?: HTMLElement;
 	private readonly containerPageUrl: string;
-	private readonly mainArtifactUrl: string;
 	private readonly documentRef: Document;
 	private readonly createResizeObserver: NonNullable<WebToolControllerOptions['createResizeObserver']>;
 	private readonly onStateChange?: (state: ToolSessionState) => void;
+	private readonly onSessionIdChange?: (sessionId: string) => void;
 	private readonly revokeObjectUrl: (url: string) => void;
 	private readonly ownedAssetUrls = new Map<string, string>();
 	private readonly detachResize: Array<() => void> = [];
@@ -77,6 +91,14 @@ export class WebToolController {
 	private mainTransport: IframeHostTransport | undefined;
 	private slateIframe: HTMLIFrameElement | undefined;
 	private slateTransport: IframeHostTransport | undefined;
+	/** Active staged Reload: replacement containers awaiting the atomic commit. */
+	private pendingReload: {
+		handle: ReloadHandle;
+		mainIframe: HTMLIFrameElement;
+		mainTransport: IframeHostTransport;
+		slateIframe?: HTMLIFrameElement;
+		slateTransport?: IframeHostTransport;
+	} | undefined;
 	private slateBooted = false;
 	private closed = false;
 
@@ -98,6 +120,7 @@ export class WebToolController {
 				return () => observer.disconnect();
 			});
 		this.onStateChange = options.onStateChange;
+		this.onSessionIdChange = options.onSessionIdChange;
 		this.revokeObjectUrl = options.revokeObjectUrl ?? ((url) => URL.revokeObjectURL(url));
 		this.session = new ToolSession({
 			entry: options.entry,
@@ -111,6 +134,8 @@ export class WebToolController {
 				this.onStateChange?.(state);
 			},
 			onHealthChange: options.onHealthChange,
+			onSessionIdChange: (sessionId) => this.onSessionIdChange?.(sessionId),
+			onReloadSettled: (outcome) => this.handleReloadSettled(outcome),
 			onDiagnostic: options.onDiagnostic
 		});
 	}
@@ -159,6 +184,51 @@ export class WebToolController {
 		this.observeSurface(this.canvasHost, 'main');
 	}
 
+	/**
+	 * Staged Reload: boots the replacement Containers with the NEW Catalog Entry while
+	 * the old Session stays active. The swap happens only when the replacement Canvas
+	 * reports ready (atomic commit); any failure releases staged resources and keeps the
+	 * old Session — the pre-cutover DOM containers are discarded instead.
+	 */
+	reload(request: WebToolReloadRequest): WebToolReloadResult {
+		if (this.closed) throw new Error('web-tool-controller: controller is closed');
+		if (this.pendingReload !== undefined) {
+			return { ok: false, diagnostic: error('web/reload-in-progress', 'a replacement is already staged') };
+		}
+		const result = this.session.reloadStart(request.entry);
+		if (!result.ok) return { ok: false, diagnostic: result.diagnostic };
+		const handle: ReloadHandle = result.handle;
+
+		// Replacement Main container (adopted first, booted by adoptMain).
+		const mainSurface = this.measure(this.canvasHost);
+		const mainIframe = this.createContainerIframe('main', request.mainArtifactUrl);
+		this.canvasHost.appendChild(mainIframe);
+		const mainTransport = this.adoptTransport(mainIframe);
+
+		// Replacement Slate plan: the replacement Slate must boot after the promoted Main
+		// is Ready, so its boot envelope is deferred to commit (recorded as a plan here).
+		let slateIframe: HTMLIFrameElement | undefined;
+		let slateTransport: IframeHostTransport | undefined;
+		if (this.slateHost !== undefined && request.entry.surfaces.slate) {
+			const slateSurface = this.measure(this.slateHost);
+			slateIframe = this.createContainerIframe('slate', request.mainArtifactUrl);
+			this.slateHost.appendChild(slateIframe);
+			slateTransport = this.adoptTransport(slateIframe);
+			handle.adoptSlate({ transport: slateTransport, surface: { kind: 'slate', ...slateSurface } });
+		}
+
+		this.pendingReload = { handle, mainIframe, mainTransport, slateIframe, slateTransport };
+		handle.adoptMain({
+			main: mainTransport,
+			surface: { kind: 'canvas', ...mainSurface },
+			inventory: {
+				assets: Object.keys(request.entry.assets),
+				exports: Object.keys(request.entry.outputs)
+			}
+		});
+		return { ok: true };
+	}
+
 	/** Closes the Session and removes both containers. */
 	close(): void {
 		if (this.closed) return;
@@ -199,6 +269,36 @@ export class WebToolController {
 
 	// ------------------------------------------------------------------ internals
 
+	/**
+	 * Settles the staged Reload DOM: commit promotes the replacement containers (the
+	 * Session already promoted the transports); failure/cancel discards them while the
+	 * old Session stays active with its original containers.
+	 */
+	private handleReloadSettled(outcome: { ok: boolean; reason?: string }): void {
+		const pending = this.pendingReload;
+		if (pending === undefined) return;
+		this.pendingReload = undefined;
+		if (outcome.ok) {
+			// The Session promoted the replacement transports; adopt the DOM side.
+			this.entry = pending.handle.newEntry;
+			this.mainTransport?.close();
+			this.mainIframe?.remove();
+			this.slateTransport?.close();
+			this.slateIframe?.remove();
+			this.mainIframe = pending.mainIframe;
+			this.mainTransport = pending.mainTransport;
+			this.slateIframe = pending.slateIframe;
+			this.slateTransport = pending.slateTransport;
+			// The replacement Slate (if planned) was booted by the commit itself.
+			this.slateBooted = pending.slateIframe !== undefined;
+		} else {
+			pending.mainTransport.close();
+			pending.mainIframe.remove();
+			pending.slateTransport?.close();
+			pending.slateIframe?.remove();
+		}
+	}
+
 	private bootSlateIfPlanned(): void {
 		if (this.closed || this.slateBooted) return;
 		if (this.slateHost === undefined || !this.entry.surfaces.slate) return;
@@ -228,7 +328,7 @@ export class WebToolController {
 		);
 	}
 
-	private createContainerIframe(endpoint: 'main' | 'slate'): HTMLIFrameElement {
+	private createContainerIframe(endpoint: 'main' | 'slate', artifactUrl?: string): HTMLIFrameElement {
 		const iframe = this.documentRef.createElement('iframe');
 		iframe.setAttribute('title', `${this.entry.name} — ${endpoint}`);
 		iframe.setAttribute('data-deshelf-endpoint', endpoint);
@@ -243,7 +343,8 @@ export class WebToolController {
 		iframe.style.background = 'transparent';
 		// `src` is set BEFORE insertion: exactly one load event (no about:blank cycle),
 		// so the transport's queued boot flushes precisely when the document is ready.
-		iframe.src = `${this.containerPageUrl}?entry=${encodeURIComponent(this.mainArtifactUrl)}&endpoint=${endpoint}`;
+		const entryArtifact = artifactUrl ?? this.mainArtifactUrl;
+		iframe.src = `${this.containerPageUrl}?entry=${encodeURIComponent(entryArtifact)}&endpoint=${endpoint}`;
 		return iframe;
 	}
 

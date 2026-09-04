@@ -53,6 +53,10 @@ export interface ToolSessionOptions {
 	onStateChange?: (state: ToolSessionState) => void;
 	onHealthChange?: (health: ToolSessionHealth) => void;
 	onDiagnostic?: (diagnostic: Diagnostic) => void;
+	/** Session id changes on Restart/Reload commit; Host chrome re-keys Session-bound UI. */
+	onSessionIdChange?: (sessionId: string) => void;
+	/** Exactly one event per staged Reload: committed (ok) or released with a reason. */
+	onReloadSettled?: (outcome: { ok: boolean; reason?: string }) => void;
 	/** Environment-supplied asset adapter (Web: blob URL; Desktop: opaque handle). */
 	assetResolver?: (assetId: string) => AssetContent | null | Promise<AssetContent | null>;
 }
@@ -287,6 +291,7 @@ export class ToolSession {
 		this.teardownRuntime({ disposeRunner: true, clearCompute: true, clearExports: true, reason: 'session-restarted' });
 
 		this.sessionId = options.sessionId ?? crypto.randomUUID();
+		this.options.onSessionIdChange?.(this.sessionId);
 		this.slateReadyFlag = false;
 		this.store = this.createParameterStore((request) => this.runCompute(request));
 		this.wireStore(this.store);
@@ -816,6 +821,11 @@ export class ToolSession {
 		this.droppedMessages += 1;
 	}
 
+	/** @internal — reload outcome notification used by the staged replacement router. */
+	notifyReloadSettled(outcome: { ok: boolean; reason?: string }): void {
+		this.options.onReloadSettled?.(outcome);
+	}
+
 	/** Enforces Host-side message direction after the shared union/schema validates. */
 	acceptInboundKind(envelope: EnvironmentEnvelope, expected: EnvironmentEnvelope['kind']): boolean {
 		if (envelope.kind === expected) return true;
@@ -1001,6 +1011,7 @@ export class ToolSession {
 		this.store = handle.stagedStore;
 		this.inspector = handle.stagedInspector;
 		this.sessionId = handle.sessionId;
+		this.options.onSessionIdChange?.(this.sessionId);
 		// Commit is only reachable through adoptMain, which always sets replacementMain.
 		const promotedMain = handle.replacementMain;
 		if (promotedMain === undefined) return;
@@ -1016,6 +1027,7 @@ export class ToolSession {
 		this.reload = null;
 		this.reloadChannel = undefined;
 		this.reloadSessionId = undefined;
+		this.options.onReloadSettled?.({ ok: true });
 		if (this.state !== 'Ready') this.transition('Ready');
 		// The replacement Slate boots only after the promoted Main is Ready.
 		const slatePlan = handle.slatePlan;
@@ -1312,6 +1324,7 @@ export class ReloadHandle {
 		this.session.reload = null;
 		this.session.reloadChannel = undefined;
 		this.session.reloadSessionId = undefined;
+		this.session.notifyReloadSettled({ ok: false, reason });
 		if (reason !== 'canceled') {
 			this.session.addDiagnostic(error('session/reload-failed', `replacement failed: ${reason}`));
 		}

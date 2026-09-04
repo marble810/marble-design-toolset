@@ -1,89 +1,194 @@
 <script lang="ts">
-	import { browser } from '$app/environment';
-	import ToolSession from '$lib/components/shell/tool-session/ToolSession.svelte';
-	import {
-		OpenToolDialog,
-		WorkspaceEmptyState,
-		WorkspaceHeader,
-		WorkspaceHelpDialog,
-		WorkspaceSettingsDialog,
-		WorkspaceTabs
-	} from '$lib/components/workspace/index.js';
-	import { createWorkspaceController } from '$lib/runtime/workspace-controller/index.js';
+	/**
+	 * Deshelf Web — Catalog-driven Tool Host (root workspace).
+	 *
+	 * The root loads the build-time generated static Catalog (never the removed runtime
+	 * registry), lists the usable Catalog Entries and opens a Tool inside the same-origin
+	 * iframe Tool Container with the Host chrome: Standard Inspector, Asset Input,
+	 * Visual Output export, Restart/Reload/Reset diagnostics.
+	 *
+	 * Run `bun ./scripts/build-web-catalog.ts` (or `bun dev`) so /deshelf/catalog.json
+	 * exists. See docs/for-framework-developers/web-iframe-adapter.md.
+	 */
+	import { onMount } from 'svelte';
+	import type { CatalogEntry } from 'tool-contract';
+	import { StaticCatalogSource } from '$lib/forge/web/static-catalog-source.js';
+	import ForgeToolHost, { type ReloadSource } from '$lib/forge/components/ForgeToolHost.svelte';
 
-	const workspace = createWorkspaceController({ browser });
+	const CATALOG_URL = '/deshelf/catalog.json';
 
-	let openToolsDialogOpen = $state(false);
-	let helpDialogOpen = $state(false);
-	let settingsDialogOpen = $state(false);
+	let source = $state<StaticCatalogSource | undefined>(undefined);
+	let entries = $state<CatalogEntry[]>([]);
+	let activeEntry = $state<CatalogEntry | undefined>(undefined);
+	let loadError = $state('');
+	let loading = $state(true);
+	let catalogKey = $state(0);
 
-	function handleOpenTool(toolId: string): void {
-		workspace.openTool(toolId);
-		openToolsDialogOpen = false;
+	async function loadCatalog(): Promise<void> {
+		loading = true;
+		loadError = '';
+		activeEntry = undefined;
+		try {
+			const next = new StaticCatalogSource(CATALOG_URL);
+			await next.load();
+			source = next;
+			entries = next.list();
+			catalogKey += 1;
+		} catch (err) {
+			loadError = err instanceof Error ? err.message : String(err);
+			entries = [];
+		} finally {
+			loading = false;
+		}
 	}
+
+	/** Reload source: re-fetch the static Catalog and resolve the same Entry identity. */
+	async function resolveReload(current: CatalogEntry): Promise<ReloadSource | { error: string }> {
+		try {
+			const next = new StaticCatalogSource(CATALOG_URL);
+			await next.load();
+			const fresh = next.get(current.catalogEntryId);
+			if (fresh === undefined) {
+				return { error: 'entry no longer exists in the Catalog' };
+			}
+			const urls = next.resolveArtifactUrls(fresh);
+			return { entry: fresh, mainArtifactUrl: urls.main };
+		} catch (err) {
+			return { error: err instanceof Error ? err.message : String(err) };
+		}
+	}
+
+	onMount(() => {
+		void loadCatalog();
+	});
 </script>
 
-<div class="workspace">
-	<WorkspaceHeader
-		onOpenTools={() => (openToolsDialogOpen = true)}
-		onOpenHelp={() => (helpDialogOpen = true)}
-		onOpenSettings={() => (settingsDialogOpen = true)}
-	/>
+<div class="forge-page">
+	<header class="forge-page__header">
+		<strong>Deshelf Web · Tool Host</strong>
+		<span class="forge-page__hint">same-origin iframe container · Catalog-driven</span>
+		<button type="button" class="forge-page__reload" onclick={loadCatalog}>Reload Catalog</button>
+	</header>
 
-	<WorkspaceTabs
-		items={workspace.openTabs}
-		activeToolId={workspace.activeToolId}
-		onActivate={workspace.activateTool}
-		onClose={workspace.closeTool}
-	/>
-
-	<main class="workspace__content">
-		{#if workspace.openToolIds.length > 0}
-			<div class="workspace__session-stack">
-				{#each workspace.openToolIds as toolId (toolId)}
-					<ToolSession
-						toolId={toolId}
-						isActive={workspace.activeToolId === toolId}
-						leftPanelWidthVw={workspace.leftPanelWidthVw}
-					/>
-				{/each}
-			</div>
-		{:else}
-			<WorkspaceEmptyState onOpenTools={() => (openToolsDialogOpen = true)} />
-		{/if}
-	</main>
+	{#if loading}
+		<div class="forge-page__empty">Loading static Catalog…</div>
+	{:else if loadError !== ''}
+		<div class="forge-page__empty forge-page__error">
+			{loadError}
+			<span>Generate it with <code>bun ./scripts/build-web-catalog.ts</code>.</span>
+		</div>
+	{:else if entries.length === 0}
+		<div class="forge-page__empty">
+			Static Catalog is empty — no Tool Projects qualified under <code>tools/</code>.
+		</div>
+	{:else if activeEntry === undefined}
+		<div class="forge-page__list">
+			{#each entries as entry (entry.catalogEntryId)}
+				<button type="button" class="forge-page__entry" onclick={() => (activeEntry = entry)}>
+					<strong>{entry.name}</strong>
+					<span>{entry.slug} · v{entry.version} · {entry.libraries.length} lib(s) · slate: {entry.surfaces.slate ? 'yes' : 'no'}</span>
+				</button>
+			{/each}
+		</div>
+	{:else}
+		<div class="forge-page__tool">
+			<button type="button" class="forge-page__back" onclick={() => (activeEntry = undefined)}>← Catalog</button>
+			{#key catalogKey}
+				<ForgeToolHost
+					entry={activeEntry}
+					catalogUrl={new URL(CATALOG_URL, location.href).toString()}
+					resolveReload={resolveReload}
+				/>
+			{/key}
+		</div>
+	{/if}
 </div>
 
-<OpenToolDialog
-	bind:open={openToolsDialogOpen}
-	toolCatalog={workspace.toolCatalog}
-	onOpenTool={handleOpenTool}
-/>
-<WorkspaceHelpDialog bind:open={helpDialogOpen} />
-<WorkspaceSettingsDialog
-	bind:open={settingsDialogOpen}
-	leftPanelWidthVw={workspace.leftPanelWidthVw}
-	onChangeLeftPanelWidth={workspace.setLeftPanelWidth}
-/>
 <style>
-	.workspace {
+	.forge-page {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-4);
+		height: 100vh;
+		padding: var(--space-4);
+		box-sizing: border-box;
+		background: var(--color-bg-app);
+		color: var(--color-fg-primary);
+	}
+	.forge-page__header {
+		display: flex;
+		align-items: center;
+		gap: var(--space-3);
+	}
+	.forge-page__hint {
+		color: var(--color-fg-muted);
+		font-size: var(--font-size-2);
+	}
+	.forge-page__reload {
+		margin-left: auto;
+		height: 28px;
+		padding: 0 var(--space-3);
+		border: 1px solid var(--color-border-strong);
+		background: var(--color-bg-elevated);
+		color: var(--color-fg-primary);
+		font-family: var(--font-family-base);
+		font-size: var(--font-size-2);
+		cursor: pointer;
+	}
+	.forge-page__empty {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+		align-items: center;
+		justify-content: center;
+		border: 1px solid var(--color-border-soft);
+		background: var(--color-bg-surface);
+		color: var(--color-fg-muted);
+		padding: var(--space-6);
+	}
+	.forge-page__error {
+		color: var(--color-danger);
+	}
+	.forge-page__list {
 		display: grid;
-		grid-template-rows: auto auto minmax(0, 1fr);
-		height: 100%;
-		padding: 0;
-		gap: 0;
+		grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+		gap: var(--space-3);
 	}
-
-	.workspace__content {
-		background: var(--color-bg-panel);
-		outline: 1px solid var(--color-border-soft);
-		outline-offset: -1px;
-		min-height: 0;
-		padding: var(--space-3);
+	.forge-page__entry {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-1);
+		padding: var(--space-4);
+		border: 1px solid var(--color-border-soft);
+		background: var(--color-bg-surface);
+		color: var(--color-fg-primary);
+		font-family: var(--font-family-base);
+		text-align: left;
+		cursor: pointer;
 	}
-
-	.workspace__session-stack {
-		height: 100%;
+	.forge-page__entry:hover {
+		border-color: var(--color-border-focus);
+	}
+	.forge-page__entry span {
+		color: var(--color-fg-muted);
+		font-size: var(--font-size-1);
+	}
+	.forge-page__tool {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-3);
+		flex: 1;
 		min-height: 0;
+	}
+	.forge-page__back {
+		align-self: flex-start;
+		height: 26px;
+		padding: 0 var(--space-3);
+		border: 1px solid var(--color-border-soft);
+		background: var(--color-bg-surface);
+		color: var(--color-fg-secondary);
+		font-family: var(--font-family-base);
+		font-size: var(--font-size-2);
+		cursor: pointer;
 	}
 </style>

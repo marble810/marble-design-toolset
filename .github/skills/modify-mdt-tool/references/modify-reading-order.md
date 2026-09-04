@@ -5,20 +5,18 @@ Use this reading order before changing an existing tool.
 ## Always Read
 
 1. `AGENTS.md`
-2. `docs/architecture/project-architecture-analysis.md`
-3. `docs/guides/Making Tools/tool-authoring-guide.md`
-4. `openspec/specs/tool-module-runtime/spec.md`
-5. `openspec/specs/tool-shell-workspace/spec.md`
-6. `openspec/specs/right-panel-modes/spec.md`
+2. `docs/architecture/deshelf-architecture.md`
+3. `docs/for-tool-developers/overview.md`
+4. `docs/for-framework-developers/runtime-and-shell.md`
 
 ## Read The Existing Tool Itself
 
-Before designing a modification, read:
+Before designing a modification, read (under `tools/<slug>/`):
 
-1. `src/tools/<tool-id>/metadata.json`
-2. `src/tools/<tool-id>/index.ts`
-3. the root-level master `.svelte`
-4. the nearest private child components that actually control the behavior being changed
+1. `manifest.json`
+2. `index.ts`
+3. the private module that actually controls the behavior being changed (`sim/`, `canvas/`, `inspector.ts`, `outputs.ts`, …)
+4. any sibling module the change couples to (e.g. realm-scoped session holder)
 
 ## Read Change Files When Present
 
@@ -27,14 +25,13 @@ If there is an active change under `openspec/changes/<change-name>/` for this to
 1. `proposal.md`
 2. `design.md`
 3. `tasks.md`
-4. any scoped `specs/**/*.md`
 
 Use the active change as the governing source for that slice.
 
-## Read When Styling Or Export Is In Scope
+## Read When The Scope Touches These Areas
 
-- Styling or Bits UI wrappers: `docs/guides/Styles/css-styling-guide.md`
-- Export changes: `docs/guides/Making Tools/tool-export-guide.md` and `openspec/specs/tool-canvas-export/spec.md`
-- Local image / video / text inputs: `docs/guides/Making Tools/tool-file-input-guide.md`
-- `pixi`: `docs/guides/Making Tools/tool-pixi-guide.md`
-- `three`: `docs/guides/Making Tools/tool-threejs-guide.md`
+- Parameter/Inspector semantics: `docs/for-tool-developers/create-a-tool.md`
+- Export changes: `docs/for-tool-developers/export.md`
+- Web adapter behavior (iframe container, static catalog): `docs/for-framework-developers/web-iframe-adapter.md`
+- Desktop adapter behavior (Open Project, build cache): `docs/for-framework-developers/desktop-adapter.md`
+- Builder pipeline changes: `docs/for-framework-developers/scaffolding-and-recipes.md`

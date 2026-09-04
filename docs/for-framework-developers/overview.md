@@ -4,7 +4,7 @@
 
 本节面向维护 Deshelf Forge、Deshelf Host、Catalog、Tool Builder、Workspace 与 Web/Desktop adapters 的开发者。Tool 作者请阅读 [Tool developer 文档](../for-tool-developers/overview.md)。
 
-> 当前仓库正从旧的同 realm Svelte Tool 架构迁移到 Catalog-driven Tool Containers。目标设计以 [`../architecture/deshelf-architecture.md`](../architecture/deshelf-architecture.md) 与 Linear MAB-65 为准；既有 OpenSpec/specs 描述尚未迁移的 implementation。
+> 旧的同 realm Svelte Tool runtime 已在 MAB-70 迁移完成后删除；当前仓库的生产路径即 Catalog-driven Tool Containers。目标设计见 [`../architecture/deshelf-architecture.md`](../architecture/deshelf-architecture.md)。
 
 ## 核心原则
 
@@ -27,7 +27,7 @@
 | [Desktop WebContents + MessagePort adapter](./desktop-adapter.md) | Open Project、AppData cache、受控 Builder、Catalog 持久化、realm 生命周期与 Asset/Export adapters |
 | [Tool SDK interface](./public-sdk.md) | `defineVisualTool`、Inspector descriptor 与 Environment client |
 | [Runtime 与 Workspace](./runtime-and-shell.md) | Session lifecycle、Parameter flow、Reload 与 adapters |
-| [Scaffolding and recipes](./scaffolding-and-recipes.md) | Tool Project 脚手架与模板维护 |
+| [Scaffolding and recipes](./scaffolding-and-recipes.md) | Tool Project 参考实现与共享构建流水线维护 |
 | [Docs system](./docs-system.md) | 文档 catalog、browser 与 audience 规则 |
 
 ## 目标 modules

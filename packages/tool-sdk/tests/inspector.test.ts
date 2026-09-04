@@ -89,3 +89,35 @@ test('binding a raw value to a slider is rejected', () => {
 	// @ts-expect-error a raw id string is not a typed parameter handle
 	assert.throws(() => ctx.root.slider({ id: 's', label: 'S', bind: 'amplitude' }), /typed handle/);
 });
+
+test('visibleWhen rules are carried onto the built elements', () => {
+	const ctx = makeContext() as InspectorContext;
+	ctx.root.section(
+		'preset',
+		'Preset',
+		(r) => {
+			r.slider({
+				id: 'amp',
+				label: 'Amplitude',
+				bind: ctx.parameters.amplitude,
+				visibleWhen: { parameterId: 'invert', equals: [false] }
+			});
+		},
+		{ visibleWhen: { parameterId: 'invert', equals: false } }
+	);
+	ctx.root.label('hint', 'hidden when inverted', { visibleWhen: { parameterId: 'invert', equals: false } });
+	ctx.root.button({
+		id: 'resim',
+		label: 'Resimulate',
+		bind: ctx.privateCallbacks.resimulate,
+		visibleWhen: { parameterId: 'invert', equals: false }
+	});
+
+	const elements = collectInspectorElements(ctx);
+	assert.equal(elements[0].kind, 'section');
+	assert.deepEqual((elements[0] as { visibleWhen?: unknown }).visibleWhen, { parameterId: 'invert', equals: false });
+	const child = (elements[0] as { children: Array<Record<string, unknown>> }).children[0] as Record<string, unknown>;
+	assert.deepEqual(child.visibleWhen, { parameterId: 'invert', equals: [false] });
+	assert.deepEqual((elements[1] as { visibleWhen?: unknown }).visibleWhen, { parameterId: 'invert', equals: false });
+	assert.deepEqual((elements[2] as { visibleWhen?: unknown }).visibleWhen, { parameterId: 'invert', equals: false });
+});

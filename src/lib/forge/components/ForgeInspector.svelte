@@ -111,13 +111,17 @@
 
 <div class="forge-inspector">
 	{#each model.elements as node (node.id)}
-		{@render renderNode(node)}
+		{#if node.visible !== false}
+			{@render renderNode(node)}
+		{/if}
 	{/each}
 </div>
 
 {#snippet renderNode(node: InspectorNodeState)}
 	{@const meta = nodeMeta(node.id)}
-	{#if node.kind === 'section'}
+	{#if node.visible === false}
+		<!-- hidden by the element's visibleWhen rule -->
+	{:else if node.kind === 'section'}
 		<div class="forge-inspector__section">
 			<div class="forge-inspector__title">{node.title}</div>
 			{#each node.children ?? [] as child (child.id)}

@@ -23,7 +23,7 @@ Verify that an implementation matches the change artifacts (specs, tasks, design
    openspec status --change "<name>" --json
    ```
    Parse the JSON to understand:
-   - `schemaName`: The workflow being used (e.g., "spec-driven")
+   - `schemaName`: The workflow being used (e.g., "proposal-driven")
    - Which artifacts exist for this change
 
 3. **Get the change directory and load artifacts**
@@ -53,34 +53,33 @@ Verify that an implementation matches the change artifacts (specs, tasks, design
      - Add CRITICAL issue for each incomplete task
      - Recommendation: "Complete task: <description>" or "Mark as done if already implemented"
 
-   **Spec Coverage**:
-   - If delta specs exist in `openspec/changes/<name>/specs/`:
-     - Extract all requirements (marked with "### Requirement:")
-     - For each requirement:
-       - Search codebase for keywords related to the requirement
+   **Scope Coverage**:
+   - Read the proposal's "What Changes" section:
+     - For each change bullet:
+       - Search codebase for keywords related to the change
        - Assess if implementation likely exists
-     - If requirements appear unimplemented:
-       - Add CRITICAL issue: "Requirement not found: <requirement name>"
-       - Recommendation: "Implement requirement X: <description>"
+     - If changes appear unimplemented:
+       - Add CRITICAL issue: "Change not found: <bullet summary>"
+       - Recommendation: "Implement change X: <description>"
 
 6. **Verify Correctness**
 
-   **Requirement Implementation Mapping**:
-   - For each requirement from delta specs:
+   **Change Implementation Mapping**:
+   - For each item from the proposal's What Changes:
      - Search codebase for implementation evidence
      - If found, note file paths and line ranges
      - Assess if implementation matches requirement intent
      - If divergence detected:
-       - Add WARNING: "Implementation may diverge from spec: <details>"
-       - Recommendation: "Review <file>:<lines> against requirement X"
+       - Add WARNING: "Implementation may diverge from the proposal: <details>"
+       - Recommendation: "Review <file>:<lines> against change X"
 
-   **Scenario Coverage**:
-   - For each scenario in delta specs (marked with "#### Scenario:"):
+   **Behavior Coverage**:
+   - For each behavior listed in design.md or the proposal:
      - Check if conditions are handled in code
-     - Check if tests exist covering the scenario
-     - If scenario appears uncovered:
-       - Add WARNING: "Scenario not covered: <scenario name>"
-       - Recommendation: "Add test or implementation for scenario: <description>"
+     - Check if tests exist covering the behavior
+     - If behavior appears uncovered:
+       - Add WARNING: "Behavior not covered: <behavior>"
+       - Recommendation: "Add test or implementation for behavior: <description>"
 
 7. **Verify Coherence**
 

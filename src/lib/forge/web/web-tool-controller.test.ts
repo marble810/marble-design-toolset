@@ -204,6 +204,64 @@ describe('WebToolController', () => {
 		controller.close();
 	});
 
+	test('staged reload commits when the replacement canvas is ready and swaps containers', async () => {
+		const entry = makeEntry();
+		const newEntry = makeEntry({ version: '2.0.0' });
+		const { controller, iframes } = makeFakeDom(entry);
+		controller.open();
+		(iframes[0].fireLoad as () => void)();
+		await tick();
+		expect(controller.session.getState()).toBe('Ready');
+		const oldSessionId = controller.session.sessionId;
+		const oldIframe = iframes[0];
+
+		// The replacement iframe is created for the NEW artifact URL.
+		const result = controller.reload({ entry: newEntry, mainArtifactUrl: '/deshelf/releases/next/artifacts/test-tool/main.js' });
+		expect(result.ok).toBe(true);
+		expect(iframes).toHaveLength(2);
+		const replacement = iframes[1];
+		expect(String(replacement.src)).toContain(`entry=${encodeURIComponent('/deshelf/releases/next/artifacts/test-tool/main.js')}`);
+		// Old session stays active (and its iframe stays mounted) while staging.
+		expect(oldIframe.detached).toBe(false);
+		expect(controller.session.getState()).toBe('Ready');
+
+		(replacement.fireLoad as () => void)();
+		await tick();
+		// Commit: replacement promoted, old containers discarded, entry swapped.
+		expect(oldIframe.detached).toBe(true);
+		expect(replacement.detached).toBe(false);
+		expect(controller.session.entry.version).toBe('2.0.0');
+		expect(controller.session.sessionId).not.toBe(oldSessionId);
+		expect(controller.session.getState()).toBe('Ready');
+		controller.close();
+	});
+
+	test('a failed staged reload keeps the old session and discards the replacement', async () => {
+		const entry = makeEntry();
+		const newEntry = makeEntry({ version: '2.0.0' });
+		const { controller, iframes } = makeFakeDom(entry);
+		controller.open();
+		(iframes[0].fireLoad as () => void)();
+		await tick();
+		const oldIframe = iframes[0];
+		const result = controller.reload({ entry: newEntry, mainArtifactUrl: '/deshelf/releases/next/artifacts/test-tool/main.js' });
+		expect(result.ok).toBe(true);
+		const replacement = iframes[1];
+
+		// The replacement never becomes ready; an explicit failure releases the staging.
+		controller.session.reload?.fail('startup-timeout');
+		await tick();
+		expect(replacement.detached).toBe(true, 'replacement discarded');
+		expect(oldIframe.detached).toBe(false, 'old session keeps its container');
+		expect(controller.session.entry.version).toBe('1.0.0');
+		expect(controller.session.getState()).toBe('Ready');
+		expect(controller.session.hasActiveReload()).toBe(false);
+
+		// The old session still works after the failed reload.
+		controller.session.resetDefaults();
+		controller.close();
+	});
+
 	test('close removes containers and detaches the session', async () => {
 		const entry = makeEntry();
 		const { controller, iframes } = makeFakeDom(entry);

@@ -1,6 +1,6 @@
 ---
 name: create-mdt-tool
-description: Create a new tool inside Marble Design Toolset. Use when the user wants to create, add, scaffold, start, or build a new tool in Marble Design Toolset or MDT, including requests such as 新建工具, 创建 Tool, 加一个 Tool, 新 Tool, 工具脚手架, 选择 PreviewCanvas 或 FullStage, or wiring optional tech stacks and export support while adding src/tools/<tool-id>.
+description: Create a new Visual Tool Project inside Marble Design Toolset (Deshelf). Use when the user wants to create, add, scaffold, start, or build a new tool, including requests such as 新建工具, 创建 Tool, 加一个 Tool, 新 Tool, 工具脚手架, wiring parameters/inspector/assets/outputs, or adding tools/<slug> under the Catalog-driven Tool Project contract.
 ---
 
 # Create MDT Tool
@@ -11,13 +11,13 @@ Do not use this skill for refactoring an existing tool. Keep existing-tool restr
 
 ## Outcome
 
-Produce a new tool design or implementation that:
+Produce a new Catalog-driven Tool Project under `tools/<slug>/` that:
 
-- follows the framework-owned workspace shell contract
-- uses the correct tool directory schema and runtime contract
+- has exactly two registration points: root `manifest.json` + fixed `index.ts`
+- keeps the Host-owned responsibilities (Parameter Store, Standard Inspector, Session lifecycle) out of the tool
+- keeps the simulation/GPU/Canvas hot path inside the Tool Container
 - reads the right docs before coding
-- selects the correct right-panel mode and optional tech stack
-- integrates export only when the tool actually needs it
+- builds into the Web static Catalog (and opens on Desktop)
 
 ## Required Reading Order
 
@@ -30,32 +30,32 @@ Always read these before creating a tool:
 Then branch as needed:
 
 - If the new tool needs export, read [export workflow](./references/export-workflow.md)
-- If the new tool uses `three`, `pixi`, or `gsap`, read [tech stack workflow](./references/tech-stack-workflow.md)
-- If the new tool is covered by an active OpenSpec change, read that change's `proposal.md`, `design.md`, `tasks.md`, and any scoped `specs/` before coding
+- If the new tool uses `three`, `pixi`, `gsap`, or `vgpu`, read [tech stack workflow](./references/tech-stack-workflow.md)
+- If the new tool is covered by an active OpenSpec change, read that change's `proposal.md`, `design.md`, and `tasks.md` before coding
 
 ## Working Rules
 
-1. Start from the tool request and define the intended `tool-id`, display name, starter shape, and right-panel mode.
-2. Read the framework constraints and the docs reading map before proposing structure.
-3. Choose the right-panel mode first: `PreviewCanvas`, `FullStage`, or free content in `RightPanel`.
-4. Decide whether the tool really needs `three`, `pixi`, `gsap`, or export support before writing code.
-5. Prefer the project scaffold when creating a new tool. If hand-writing files, still follow the same schema.
-6. Keep `metadata.json` static-only and keep runtime wiring in `index.ts`.
-7. Put exactly one root-level master `.svelte` in the tool root. Put every other `.svelte` file under `components/`.
-8. Use framework components for shell structure. Do not recreate header, tabs, dialogs, or workspace layout inside a tool.
-9. Validate with the narrowest useful check first, then run `npm run build` before considering the task done.
+1. Start from the tool request and define the intended `slug`, display name, and whether a Slate surface is needed.
+2. Copy the closest reference project (`tools/hello-canvas/` minimal, `tools/shallow-water/` full-featured) instead of scaffolding from memory; there is no generator CLI anymore.
+3. Generate a fresh `projectId` UUID; never reuse one from another project.
+4. Declare the flat Parameter set in the Tool Entry `parameters` map with complete constraints; the Host Parameter Store is the validity authority.
+5. Build the Inspector tree in `createInspector` with typed handles only; use `visibleWhen` for conditional relevance — never render Tool-owned control panels.
+6. Register Main-only callbacks in `privateCallbacks` via `defineInspectorCallback`; public actions go in `commands`.
+7. Declare Asset Slots and Visual Outputs as named maps; keep their callbacks in the Main artifact.
+8. Keep `index.ts` top-level side-effect free; dynamic-import `canvas/Canvas.svelte` (and optional `slate/Slate.svelte`).
+9. Validate with the narrowest useful check first, then `bun run forge:web-catalog` and `bun test` before considering the task done.
 
 ## Completion Checks
 
 Before finishing, confirm all of these:
 
-- new tool files match the required schema
-- chosen right-panel mode matches the tool's interaction model
-- style choices use CSS Custom Properties and `px`
-- any Bits UI wrapper usage preserves required prop forwarding
-- `techStack` is declared only in `index.ts` when needed
-- export metadata and runtime registration are both present when export is supported
-- build passes
+- root has only `manifest.json` + `index.ts` as registration points
+- `index.ts` is a single `export default defineVisualTool(...)` with no top-level side effects
+- Canvas/Slate are dynamic imports; no runtime exporter registration anywhere
+- private callbacks use the named map; no inline anonymous handlers
+- declared `libraries` match actual bare imports
+- `bun run forge:web-catalog` reports the tool as a usable entry (no diagnostics)
+- `bun test` and `bun run typecheck` pass
 
 ## References
 

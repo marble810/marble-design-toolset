@@ -1,55 +1,51 @@
 # Framework Constraints
 
-Read this first. These are hard constraints for every tool.
+Read this first. These are hard constraints for every Tool Project.
 
-## Layout And Ownership
+## Ownership
 
-- The workspace shell is framework-owned.
-- A tool may only render its own left-side content and right-side content.
-- Do not recreate the top-level workspace shell, header, tabs, settings, help, or about dialog inside a tool.
-- `LeftPanel` already renders `MainInfo` at the top. Do not duplicate tool title and description there.
+- Deshelf Host owns: top-level layout, Standard Inspector, Parameter Store (validation + computed scheduling), Session lifecycle, Asset selection, Export orchestration.
+- The Tool owns: Canvas pixels, rAF loop, GPU/simulation state, Tool Entry callback implementations. These hot paths stay inside the Tool Container and never cross the Environment API.
+- Do not render LeftPanel/RightPanel or re-create the workspace shell inside a tool. Inspector controls come from the build-time-extracted tree.
 
 ## File Schema
 
-- Every tool lives in `src/tools/<tool-id>/`.
-- `tool-id` must be kebab-case.
-- The tool root must contain `metadata.json`, `index.ts`, and exactly one root-level master `.svelte`.
-- The master component filename must be the PascalCase form of `tool-id`.
-- Every other private `.svelte` component must live under `components/`.
+- Every tool lives in `tools/<slug>/` (convention root scanned by the Forge build).
+- `slug` must be kebab-case and globally unique.
+- The tool root must contain exactly two registration points: `manifest.json` and `index.ts`.
+- `index.ts` has exactly one `export default defineVisualTool(...)` and no top-level side effects.
+- Additional files (`parameters.ts`, `inspector.ts`, `outputs.ts`, `assets.ts`, `commands.ts`, `callbacks.ts`, `sim/`, `canvas/`, `slate/`) are private organization only — never a second registration entry.
+- Canvas and Tool Slate must be dynamic imports (`() => import('./canvas/Canvas.svelte')`).
 
-## Metadata And Runtime
+## Manifest
 
-- `metadata.json` is static-only.
-- Put only static metadata there, such as `name`, `desc`, `tag`, `version`, optional `enabled`, and optional `export`.
-- Do not put `techStack`, `loadComponent`, component paths, or state defaults in `metadata.json`.
-- `index.ts` owns runtime definition and lazy component loading.
-- Declare `techStack` only in `index.ts`.
+- `manifest.json` is a closed schema: `contractVersion`, `projectId` (immutable UUID), `slug`, `name`, optional `description`/`tags`, `version` (semver), `forgeProfile`, `libraries`.
+- Never add `entry`, parameters, commands, inspector, capability, slate, export, or `enabled` to the Manifest.
+
+## Parameters And Inspector
+
+- Parameters are a flat named map in the Tool Entry; constraints make the Host Store the validity authority (out-of-range writes are rejected, not clamped).
+- `computed` parameters need `compute` (pure, no GPU/IO) + `dependsOn`.
+- Inspector bindings accept typed handles only; inline anonymous callbacks fail extraction.
+- Conditional relevance uses `visibleWhen` (host-evaluated against live store values); the tree itself is static in the Catalog.
 
 ## Styling And UI
 
-- Do not use Tailwind.
-- Use CSS Custom Properties and `px` units.
-- Shared UI copy must be English.
-- The app is landscape-only. The framework handles the sub-720px blocking state.
-- Interactive base components should be based on Bits UI wrappers.
-- Layout components must be hand-written, not Bits UI.
-
-## Bits UI Prop Forwarding
-
-- When using a Bits UI `child` snippet, forward `{...props}` to the delegated element.
-- For floating content, preserve the outer `{...wrapperProps}` and inner `{...props}` structure.
-- Do not put visual styling on the wrapper element used only for positioning.
+- Do not use Tailwind. Use CSS Custom Properties and `px` units.
+- Shared UI copy must be English. The app is landscape-only.
+- The Container realm has no Host `app.css`: give shared design tokens a fallback (`var(--token, fallback)`) or write px values.
+- Svelte `<script lang="ts">` supports TS syntax only (type annotations); no preprocess-only features.
 
 ## Heavy Dependencies
 
-- `three`, `pixi`, and `gsap` are optional heavy stacks.
-- Load them through the shared runtime.
-- Do not directly couple heavy dependencies into the common shell.
+- `three`, `pixi`, `gsap`, `vgpu` are Forge Profile-supplied Framework Libraries.
+- Declare them in `manifest.libraries` and import bare (`import * as THREE from 'three'`); the container import map supplies one shared runtime instance.
+- Tools never bundle their own `node_modules`, third-party packages, or Vite/Svelte config.
 
-## Local File Inputs
+## Asset And Export
 
-- When a tool imports local image, video, or text files, use the shared `src/lib/runtime/file-input/` runtime.
-- Do not reimplement separate file-kind detection, drop parsing, or object URL cleanup inside each tool.
+- Asset Inputs are typed slots in the Tool Entry `assets` map; the Host owns the picker and content lifecycle. Real file paths never enter the tool (Web: blob URL; Desktop: `deshelf-cache://` opaque URL).
+- Visual Outputs are declared in the `outputs` map; the render/encode callback stays in the Main artifact. Registering an exporter after Canvas mount is forbidden.
 
 ## Documentation Language
 

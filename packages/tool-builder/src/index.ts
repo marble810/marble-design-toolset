@@ -6,7 +6,8 @@
 export {
 	buildToolProject,
 	DEFAULT_EXTRACTION_TIMEOUT_MS,
-	DEFAULT_TOOL_BUILDER_ENVIRONMENT
+	DEFAULT_TOOL_BUILDER_ENVIRONMENT,
+	isFrameworkLibraryImport
 } from './pipeline.ts';
 export type {
 	BuildToolProjectInput,

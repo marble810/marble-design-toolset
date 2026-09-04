@@ -10,7 +10,8 @@ import {
 	CatalogStore,
 	buildToolProject,
 	DEFAULT_EXTRACTION_TIMEOUT_MS,
-	DEFAULT_TOOL_BUILDER_ENVIRONMENT
+	DEFAULT_TOOL_BUILDER_ENVIRONMENT,
+	isFrameworkLibraryImport
 } from '../src/index.ts';
 import type { BuildToolProjectOutcome, ToolBuilderEnvironment } from '../src/index.ts';
 
@@ -154,6 +155,17 @@ describe('buildToolProject pipeline', () => {
 	test('DEFAULT_EXTRACTION_TIMEOUT_MS is a positive finite timeout', () => {
 		assert.equal(typeof DEFAULT_EXTRACTION_TIMEOUT_MS, 'number');
 		assert.ok(DEFAULT_EXTRACTION_TIMEOUT_MS > 0);
+	});
+
+	test('declared Framework Libraries stay external so the import map can supply them', () => {
+		const libs = ['three'];
+		assert.equal(isFrameworkLibraryImport('three', libs), true);
+		assert.equal(isFrameworkLibraryImport('three/examples/jsm/controls/OrbitControls.js', libs), true);
+		assert.equal(isFrameworkLibraryImport('svelte', libs), true, 'svelte is always supplied');
+		assert.equal(isFrameworkLibraryImport('svelte/internal/client', libs), true);
+		assert.equal(isFrameworkLibraryImport('threepack', libs), false, 'no accidental prefix matches');
+		assert.equal(isFrameworkLibraryImport('pixi.js', libs), false, 'undeclared libraries bundle into the artifact');
+		assert.equal(isFrameworkLibraryImport('./chunks/relative.js', libs), false);
 	});
 
 	test('rejects output directories that overlap the Tool Project before Vite can delete files', async () => {

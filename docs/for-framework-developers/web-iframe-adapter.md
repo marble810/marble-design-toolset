@@ -85,4 +85,4 @@ same-origin iframe 与 Host 共享同一个 renderer process。**Tool 内的死�
 
 ## Demo 路由
 
-`/forge`（`src/routes/forge/`）是 adapter 的可视化验证面：列出静态 Catalog、打开 Tool、渲染 Standard Inspector（rAF 合并 pointer 输入）、Asset 输入与 Export 按钮、Failed/Unresponsive 时的 Restart 诊断横幅。该路由仅做 client 渲染（`ssr = false`），不接入旧 Workspace。
+根路由 `/`（`src/routes/+page.svelte`）是 Catalog-driven Tool Host：列出静态 Catalog、打开 Tool、渲染 Standard Inspector（rAF 合并 pointer 输入）、Asset 输入与 Export 按钮、Restart / staged Reload / Reset Defaults 控件与诊断横幅。该页面仅做 client 渲染（`ssr = false`）。

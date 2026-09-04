@@ -24,7 +24,7 @@ export { validatePrivateCallbackMap } from './private-callback.ts';
 export type { OutputKind, VisualOutputDescriptor } from './output.ts';
 export { validateOutputMap } from './output.ts';
 
-export type { InspectorBinding, InspectorElement, InspectorTargets, InspectorTreeDescriptor } from './inspector.ts';
+export type { InspectorBinding, InspectorElement, InspectorTargets, InspectorTreeDescriptor, InspectorVisibilityRule } from './inspector.ts';
 export { validateInspectorTree } from './inspector.ts';
 
 export type { Diagnostic, Result } from './diagnostics.ts';

@@ -74,3 +74,76 @@ test('nested section children are validated', () => {
 	assert.equal(r.ok, false);
 	if (!r.ok) assert.ok(r.diagnostics.some((d) => d.code === 'inspector/binding'));
 });
+
+test('valid visibleWhen rules are accepted', () => {
+	const tree = {
+		elements: [
+			{
+				kind: 'section',
+				id: 'preset',
+				title: 'Preset',
+				visibleWhen: { parameterId: 'sourceMode', equals: 'preset' },
+				children: [
+					{
+						kind: 'slider',
+						id: 'size',
+						label: 'Size',
+						binding: { kind: 'parameter', parameterId: 'amplitude' },
+						visibleWhen: { parameterId: 'sourceMode', equals: ['preset'] }
+					}
+				]
+			},
+			{
+				kind: 'button',
+				id: 'resim',
+				label: 'Resimulate',
+				binding: { kind: 'private-callback', callbackId: 'resimulate' },
+				visibleWhen: { parameterId: 'invert', equals: [true, false] }
+			}
+		]
+	};
+	const r = validateInspectorTree(tree, CTX);
+	assert.equal(r.ok, true, JSON.stringify(r.ok ? null : r.diagnostics, null, 2));
+});
+
+test('visibleWhen referencing an unknown parameter is rejected', () => {
+	const tree = {
+		elements: [
+			{
+				kind: 'slider',
+				id: 'amp',
+				label: 'Amplitude',
+				binding: { kind: 'parameter', parameterId: 'amplitude' },
+				visibleWhen: { parameterId: 'nonexistent', equals: 1 }
+			}
+		]
+	};
+	const r = validateInspectorTree(tree, CTX);
+	assert.equal(r.ok, false);
+	if (!r.ok) assert.ok(r.diagnostics.some((d) => d.code === 'inspector/visible-when'));
+});
+
+test('visibleWith non-primitive or empty equals is rejected', () => {
+	const cases: Array<Record<string, unknown>> = [
+		{ parameterId: 'amplitude', equals: [] },
+		{ parameterId: 'amplitude', equals: [null] },
+		{ parameterId: 'amplitude', equals: { match: 1 } },
+		{ parameterId: 'amplitude' }
+	];
+	for (const visibleWhen of cases) {
+		const tree = {
+			elements: [
+				{
+					kind: 'toggle',
+					id: 'inv',
+					label: 'Invert',
+					binding: { kind: 'parameter', parameterId: 'invert' },
+					visibleWhen: visibleWhen as never
+				}
+			]
+		};
+		const r = validateInspectorTree(tree, CTX);
+		assert.equal(r.ok, false, JSON.stringify(visibleWhen));
+		if (!r.ok) assert.ok(r.diagnostics.some((d) => d.code === 'inspector/visible-when'), JSON.stringify(visibleWhen));
+	}
+});

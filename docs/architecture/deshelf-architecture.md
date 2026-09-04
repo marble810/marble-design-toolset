@@ -1,6 +1,6 @@
 # Deshelf 目标架构
 
-> 状态：目标设计。当前 `src/` 与既有 OpenSpec 仍描述迁移前实现；实现迁移以 Linear MAB-65 及其拆分 Issue 为工作入口。
+> 状态：已落地。Web/Desktop adapters 与 Shallow Water 迁移样本（`tools/shallow-water/`）已实现，旧同 realm runtime 已删除（Linear MAB-65…MAB-70）。本文同时是设计 reference 与当前 architecture。
 
 ## 1. 设计立场
 

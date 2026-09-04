@@ -1,6 +1,6 @@
 # AGENTS
 
-只保留必须严格遵守的框架级约束；目标 architecture 见 `docs/architecture/deshelf-architecture.md`，现有实现规格见 `openspec/specs/`。涉及 Catalog、Tool Container、Environment API 或 Tool Project migration 时，以目标 architecture 为准。
+只保留必须严格遵守的框架级约束；目标 architecture 见 `docs/architecture/deshelf-architecture.md`。涉及 Catalog、Tool Container、Environment API 或 Tool Project migration 时，以目标 architecture 为准。
 
 ## Hard Constraints
 - 样式基础层不得继续使用 Tailwind；统一使用 CSS Custom Properties 和 px 单位。
@@ -18,5 +18,5 @@
 - 性能热路径必须留在 Tool Container：rAF、Three/Pixi/WebGPU、simulation state 与 Canvas pixels 不得经过 Environment API。
 - Framework Libraries 只由 Forge Profile 供给并按 Tool Manifest 声明加载：`three`、`pixi`、`gsap`、`vgpu`。Tool 不得自带 `node_modules`、第三方 package 或自定义 Vite/Svelte 配置。
 - Tool 的本地素材输入与 Export 必须通过 Host 提供的 environment adapters；Desktop 不得向 Tool 暴露真实文件路径。
-- OpenSpec 文档（proposal、design、specs、tasks 等 artifact）统一使用中文撰写。
+- OpenSpec 采用 Proposal-Driven Schema（proposal → design → tasks，无 specs）；OpenSpec 文档（proposal、design、tasks 等 artifact）统一使用中文撰写。
 - docs/ 目录下的开发者文档统一使用中文撰写。

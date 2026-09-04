@@ -62,6 +62,15 @@ function normalizeId(id: string): string {
 	return path.normalize(id).replace(/\\/g, '/');
 }
 
+/** Bare Framework Library specifiers a tool build keeps external (never bundles). */
+export function isFrameworkLibraryImport(id: string, libraries: readonly string[]): boolean {
+	// The Svelte runtime is always Forge-supplied (container bootstrap + mounted surfaces).
+	if (id === 'svelte' || id.startsWith('svelte/')) return true;
+	// Declared libraries resolve through the container import map, including subpaths
+	// (e.g. `three/examples/...`), so every tool graph shares one runtime instance.
+	return libraries.some((lib) => id === lib || id.startsWith(`${lib}/`));
+}
+
 function isSameOrInside(parent: string, candidate: string): boolean {
 	const relative = path.relative(parent, candidate);
 	return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
@@ -227,9 +236,10 @@ export async function buildToolProject(input: BuildToolProjectInput): Promise<Bu
 					fileName: () => 'main.js'
 				},
 				rollupOptions: {
-					// The Svelte runtime is a Forge-supplied Framework Library resolved inside
-					// the Tool Container; Tool Projects never bundle their own copy.
-					external: (id) => id === 'svelte' || id.startsWith('svelte/'),
+					// The Svelte runtime and the Manifest-declared Framework Libraries are
+					// Forge-supplied and resolved inside the Tool Container (import map);
+					// Tool Projects never bundle their own copies.
+					external: (id) => isFrameworkLibraryImport(id, manifest.value.libraries),
 					output: {
 						format: 'es',
 						chunkFileNames: 'chunks/[name]-[hash].js',

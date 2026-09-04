@@ -149,4 +149,51 @@ describe('InspectorHost', () => {
 		expect(results[0]).toMatchObject({ accepted: true, id: 'speed', value: 3 });
 		expect(session.store.get('speed')).toBe(3);
 	});
+
+	test('visibleWhen rules flip element visibility with the store value', () => {
+		const { session } = makeHost();
+		const entry = makeEntry({
+			inspectorTree: {
+				elements: [
+					{ kind: 'slider', id: 'speedSlider', label: 'Speed', binding: { kind: 'parameter', parameterId: 'speed' } },
+					{
+						kind: 'section',
+						id: 'stormOnly',
+						title: 'Storm',
+						visibleWhen: { parameterId: 'preset', equals: 'storm' },
+						children: [
+							{ kind: 'toggle', id: 'calmToggle', label: 'Calm', binding: { kind: 'parameter', parameterId: 'preset' } }
+						]
+					},
+					{
+						kind: 'label',
+						id: 'hint',
+						text: 'pick a preset',
+						visibleWhen: { parameterId: 'preset', equals: ['calm', 'storm'] }
+					}
+				]
+			}
+		});
+		const timer = new ManualTimer();
+		const host = new InspectorHost({
+			tree: entry.inspectorTree,
+			store: session.store,
+			executeAction: () => ({ ok: false as const, diagnostic: { severity: 'error' as const, code: 'x', message: 'x' } }),
+			commandStatus: { subscribe: () => () => {} }
+		});
+
+		// default preset = calm: storm section hidden, always-visible hint shown.
+		expect(find(host.viewModel(), 'stormOnly')?.visible).toBe(false);
+		expect(find(host.viewModel(), 'hint')?.visible).toBe(true);
+
+		session.store.set('preset', 'storm', 0);
+		expect(find(host.viewModel(), 'stormOnly')?.visible).toBe(true);
+		expect(find(host.viewModel(), 'hint')?.visible).toBe(true);
+
+		session.store.set('preset', 'calm', 1);
+		expect(find(host.viewModel(), 'stormOnly')?.visible).toBe(false);
+
+		// Elements without a rule are always visible.
+		expect(find(host.viewModel(), 'speedSlider')?.visible).toBe(true);
+	});
 });

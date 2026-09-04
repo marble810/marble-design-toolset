@@ -1,0 +1,11 @@
+{
+	"contractVersion": 1,
+	"projectId": "b3c871c9-8a98-4eda-899f-a9f15d454336",
+	"slug": "shallow-water",
+	"name": "Shallow Water Height",
+	"description": "Generate black-and-white shallow water height animations from an init map.",
+	"tags": ["simulation", "height-map", "three"],
+	"version": "1.0.0",
+	"forgeProfile": "forge-v1",
+	"libraries": ["three"]
+}

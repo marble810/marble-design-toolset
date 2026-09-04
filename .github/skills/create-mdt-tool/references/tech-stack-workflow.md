@@ -1,48 +1,20 @@
 # Tech Stack Workflow
 
-Read this only when the tool needs `three`, `pixi`, or `gsap`.
+Framework Libraries (`three`, `pixi`, `gsap`, `vgpu`) are supplied by the Forge Profile through the container import map — tools never bundle their own copies.
 
-## General Rule
+## Declaring
 
-- Declare heavy stacks in `index.ts` using `techStack`.
-- Load them through the shared runtime.
-- Keep the common shell free from direct heavy-library coupling.
+1. Add the library id to `manifest.json` → `"libraries": ["three"]` (validated against the supported set).
+2. Import it bare in tool-private modules: `import * as THREE from 'three'`. Declared libraries (and their subpaths) are kept external by the builder, so the import resolves through the container import map at runtime.
+3. Keep the import out of `index.ts` when possible: the Forge extraction worker evaluates the Tool Entry and must not need GPU libraries. Load heavy modules lazily (`await import('./sim/export-replay.ts')`) inside callbacks that need them — see `tools/shallow-water/outputs.ts`.
 
-## Pixi
+## Using In The Canvas
 
-Before coding with Pixi, read:
+- The Canvas owns the WebGL/Pixi context and the rAF loop. Create renderers on mount and dispose on unmount.
+- Do not pass GPU objects across the Environment API; only small control messages (parameter changes, surface resize) cross it.
+- Simulation stepping must be deterministic where exports replay it: drive export rendering from integer step counts, not wall-clock time (see `tools/shallow-water/sim/export-replay.ts`).
 
-- `docs/guides/Making Tools/tool-pixi-guide.md`
+## Verification
 
-Use Pixi when the tool is fundamentally 2D-renderer-driven and benefits from an explicit scene graph or texture workflow.
-
-Checklist:
-
-- initialize Pixi in a private component under `components/`
-- mount and destroy the application cleanly
-- keep parameter updates deterministic
-- use `PreviewCanvas` or `FullStage` according to the tool's stage model
-
-## Three
-
-Before coding with Three, read:
-
-- `docs/guides/Making Tools/tool-threejs-guide.md`
-
-Use Three when the tool is truly 3D or WebGL-scene-driven.
-
-Checklist:
-
-- create and dispose renderer, scene resources, and observers cleanly
-- keep render loop ownership explicit
-- choose `FullStage` unless a fixed-size preview model is clearly better
-
-## GSAP
-
-Use GSAP only when animation requirements are strong enough to justify it.
-
-Checklist:
-
-- declare `gsap` in `index.ts`
-- keep animation ownership local to the tool
-- clean up timelines or tickers on destroy
+- `bun run forge:web-catalog` must list the library under the entry's `libraries` and bundle it into the release `libs/` (check the `[forge] supplied Framework Library` log lines).
+- Open the tool on `/` and confirm the canvas boots in the container (the import map only supplies libraries inside `container.html`).

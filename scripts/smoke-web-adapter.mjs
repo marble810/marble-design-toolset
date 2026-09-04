@@ -1,7 +1,9 @@
 /**
  * Browser smoke test for the Deshelf Web adapter (manual/CI-optional): serves the
- * production build, opens /forge with headless Chrome, opens the first Catalog entry
- * and asserts the Tool Container reaches Ready + animates (rAF) + survives a Restart.
+ * production build, opens the root Tool Host, opens the hello-canvas Catalog entry and
+ * asserts the Tool Container reaches Ready + animates (rAF) + survives a Restart, then
+ * opens the shallow-water entry and asserts the migrated simulation tool also reaches
+ * Ready with a mounted canvas.
  *
  * Run: bun ./scripts/smoke-web-adapter.mjs   (requires `bun run build` first)
  */
@@ -33,7 +35,7 @@ const server = createServer(async (req, res) => {
 		let urlPath = decodeURIComponent(new URL(req.url, 'http://x').pathname);
 		if (urlPath.endsWith('/')) urlPath += 'index.html';
 		let file = path.join(BUILD, urlPath);
-		if (!existsSync(file) || urlPath === '/forge') file = path.join(BUILD, 'forge.html');
+		if (!existsSync(file) || urlPath === '/') file = path.join(BUILD, 'index.html');
 		const body = await fs.readFile(file);
 		res.writeHead(200, { 'content-type': MIME[path.extname(file)] ?? 'application/octet-stream' });
 		res.end(body);
@@ -71,18 +73,28 @@ try {
 	});
 	page.on('pageerror', (error) => consoleErrors.push(`pageerror: ${error.message}`));
 
-	await page.goto(`${base}/forge`, { waitUntil: 'networkidle2', timeout: 30_000 });
+	await page.goto(`${base}/`, { waitUntil: 'networkidle2', timeout: 30_000 });
 
-	// Open the first catalog entry.
-	await page.waitForSelector('.forge-page__entry', { timeout: 20_000 });
-	await page.click('.forge-page__entry');
+	/** Opens the Catalog entry whose name matches, then waits for the Ready state. */
+	async function openEntry(name) {
+		await page.waitForSelector('.forge-page__entry', { timeout: 20_000 });
+		const clicked = await page.evaluate((entryName) => {
+			const entries = [...document.querySelectorAll('.forge-page__entry')];
+			const target = entries.find((entry) => entry.querySelector('strong')?.textContent?.includes(entryName));
+			if (target === undefined) return false;
+			target.click();
+			return true;
+		}, name);
+		if (!clicked) throw new Error(`catalog entry '${name}' not found`);
+		await page.waitForFunction(
+			() => document.querySelector('.forge-host__status')?.textContent.includes('Ready') === true,
+			{ timeout: 30_000 }
+		);
+		console.log(`SMOKE: ${name} session Ready ✔`);
+	}
 
-	// Wait for the Session to become Ready (Host chrome status text).
-	await page.waitForFunction(
-		() => document.querySelector('.forge-host__status')?.textContent.includes('Ready') === true,
-		{ timeout: 30_000 }
-	);
-	console.log('SMOKE: session Ready ✔');
+	// --- hello-canvas: rAF animation, Parameter flow into the Slate, Restart ---------
+	await openEntry('Hello Canvas');
 
 	// The canvas iframe exists and its container mounted the tool canvas.
 	const canvasCount = await page.evaluate(() => {
@@ -121,12 +133,59 @@ try {
 	if (!hueAfter.includes('42')) throw new Error(`slate mirror did not follow the parameter change (${hueBefore} → ${hueAfter})`);
 
 	// Restart keeps the page alive and returns to Ready.
-	await page.click('.forge-host__restart');
+	await page.click('[data-action="restart"]');
 	await page.waitForFunction(
 		() => document.querySelector('.forge-host__status')?.textContent.includes('Ready') === true,
 		{ timeout: 30_000 }
 	);
 	console.log('SMOKE: restart → Ready ✔');
+
+	// --- shallow-water: the migrated simulation Tool Project -------------------------
+	await page.evaluate(() => {
+		const back = document.querySelector('.forge-page__back');
+		if (back === null) throw new Error('back-to-catalog button not found');
+		back.click();
+	});
+	await openEntry('Shallow Water Height');
+
+	const simCanvasCount = await page.evaluate(() => {
+		const iframe = document.querySelector('iframe[data-deshelf-endpoint="main"]');
+		return iframe !== null && iframe.contentDocument !== null ? iframe.contentDocument.querySelectorAll('canvas').length : 0;
+	});
+	if (simCanvasCount < 1) throw new Error(`expected a shallow-water <canvas>, got ${simCanvasCount}`);
+	console.log('SMOKE: shallow-water canvas mounted ✔');
+
+	// The migrated preset init map seeds the sim, then the rAF loop advances it: the
+	// Inspector's Resimulate button (private callback) must stay wired after migration.
+	const simStatus = await page.evaluate(() => {
+		const iframe = document.querySelector('iframe[data-deshelf-endpoint="main"]');
+		return iframe?.contentDocument?.querySelector('.shallow-canvas__overlay')?.textContent ?? 'no-overlay';
+	});
+	console.log(`SMOKE: shallow-water overlay status: '${simStatus}' (no error overlay expected)`);
+	if (simStatus.includes('Failed to read init map')) throw new Error(`shallow-water init map failed: ${simStatus}`);
+
+	await page.evaluate(() => {
+		const buttons = [...document.querySelectorAll('.forge-inspector__button')];
+		const resimulate = buttons.find((button) => button.textContent?.includes('Resimulate'));
+		if (resimulate === undefined) throw new Error('Resimulate button not found in Inspector');
+		resimulate.click();
+	});
+	await new Promise((resolve) => setTimeout(resolve, 500));
+	console.log('SMOKE: shallow-water Resimulate (private callback) ✔');
+
+	// Staged Reload over the same Catalog entry: the old Session stays active until the
+	// replacement Canvas is Ready, then the commit swaps the containers.
+	await page.click('[data-action="reload"]');
+	await new Promise((resolve) => setTimeout(resolve, 1000));
+	await page.waitForFunction(
+		() => document.querySelector('.forge-host__status')?.textContent.includes('Ready') === true,
+		{ timeout: 30_000 }
+	);
+	const reloadNotes = await page.evaluate(() => [...document.querySelectorAll('.forge-host__note')].map((n) => n.textContent));
+	if (reloadNotes.some((note) => note.includes('reload rejected') || note.includes('failed'))) {
+		throw new Error(`reload did not settle cleanly: ${JSON.stringify(reloadNotes)}`);
+	}
+	console.log('SMOKE: staged reload → Ready ✔');
 
 	// Filter benign errors (favicon etc.) — surface everything else.
 	const relevant = consoleErrors.filter((text) => !text.includes('favicon'));

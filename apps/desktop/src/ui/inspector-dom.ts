@@ -65,6 +65,7 @@ export function renderInspector(host: InspectorHost, entry: CatalogEntry): Inspe
 	// ------------------------------------------------------------------ rendering
 
 	function renderSection(state: InspectorNodeState, container: HTMLElement): void {
+		if (state.visible === false) return;
 		const section = document.createElement('section');
 		section.className = 'inspector__section';
 		const title = document.createElement('h3');
@@ -76,6 +77,7 @@ export function renderInspector(host: InspectorHost, entry: CatalogEntry): Inspe
 	}
 
 	function renderElement(state: InspectorNodeState, container: HTMLElement): void {
+		if (state.visible === false) return;
 		if (state.kind === 'section') {
 			renderSection(state, container);
 			return;
@@ -197,6 +199,18 @@ export function renderInspector(host: InspectorHost, entry: CatalogEntry): Inspe
 		return '';
 	}
 
+	function flattenModel(model: InspectorViewModel): InspectorNodeState[] {
+		const out: InspectorNodeState[] = [];
+		const walk = (nodes: readonly InspectorNodeState[]): void => {
+			for (const node of nodes) {
+				out.push(node);
+				if (node.children !== undefined) walk(node.children);
+			}
+		};
+		walk(model.elements);
+		return out;
+	}
+
 	// ------------------------------------------------------------------ model sync
 
 	function updateValues(): void {
@@ -220,7 +234,10 @@ export function renderInspector(host: InspectorHost, entry: CatalogEntry): Inspe
 	}
 
 	function applyModel(model: InspectorViewModel): void {
-		const signature = model.elements.map((element) => element.id).join('|');
+		// Visibility flips (visibleWhen) re-render: the retained row records would be stale.
+		const signature = flattenModel(model)
+			.map((element) => `${element.id}:${element.visible === false ? 'h' : 'v'}`)
+			.join('|');
 		if (signature === root.dataset.signature) {
 			updateValues();
 			return;

@@ -2,37 +2,49 @@
 
 ## 适用对象
 
-本节文档面向在 Marble Design Toolset（mdt.）中开发新 tool 或维护现有 tool 的作者。你不需要了解 framework 内部实现，只需要通过公共 SDK 和 recipes 完成工作。
+本节文档面向在 Deshelf 中开发 Visual Tool Project 的作者。Tool 是一个由 Deshelf Forge 在构建期编译、抽取并发布进 Catalog 的独立工程；运行时它只拥有 Canvas（与可选 Slate），Parameter Store、Standard Inspector 与 Session 生命周期全部由 Deshelf Host 拥有。
 
 ## 最短路径
 
 ```bash
-bun run create:tool   # 交互式选择名称和 capability recipe
-npm run build         # 构建校验
-npm run test          # 运行测试
+# 1. 按照本节 create-a-tool.md 创建 Tool Project（tools/<slug>/）
+# 2. 生成静态 Catalog 并启动 Web Host
+bun run dev           # 等价于 bun run forge:web-catalog && vite dev
+# 3. 打开根路由 /，从 Catalog 列表打开你的 Tool
 ```
+
+## 心智模型
+
+```text
+tools/<slug>/
+├─ manifest.json      ← 静态身份（唯一 Manifest）
+├─ index.ts           ← Tool Entry（唯一登记点）
+├─ canvas/            ← Main Container 的 Visual Tool Surface
+├─ slate/             ← 可选 Tool Slate（独立 Container）
+└─ sim/ 等            ← 私有组织文件（parameters.ts / assets… 仅供参考拆分）
+```
+
+- **Host 拥有**：Parameter Store（含 constraint 校验、computed 调度）、Standard Inspector（渲染 Catalog 里的 retained tree）、Session 生命周期、Asset 选择与 Export 编排。
+- **Tool 拥有**：Canvas 像素、rAF 循环、GPU/simulation 状态、Tool Entry 的 callback 实现。这些热路径全部留在 Container 内，不经过 Environment API。
 
 ## 文档索引
 
 | 文档 | 内容 |
 |---|---|
-| [create-a-tool.md](./create-a-tool.md) | 从零创建 tool：目录 schema、metadata.json、index.ts、layout 组件和公共 SDK 用法 |
-| [file-input.md](./file-input.md) | 使用 framework IO facade 导入本地图像、影片和文字文件 |
-| [layout-template.md](./layout-template.md) | 使用 `createLayoutToolController` 构建 DOM 平面版式模板工具 |
-| [export.md](./export.md) | 声明导出能力、注册 exporter、PNG / 视频导出流程 |
-| [pixi.md](./pixi.md) | 使用 PixiJS 2D 渲染：recipe、render host lifecycle、导出接入 |
-| [three.md](./three.md) | 使用 Three.js：recipe、render host lifecycle、animation loop、导出接入 |
-| [css-styling.md](./css-styling.md) | 设计 Token、Bits UI 集成、tool 作用域样式 |
-| [ui-controls/slider-field.md](./ui-controls/slider-field.md) | SliderField 共享组件用法与约束模型 |
+| [create-a-tool.md](./create-a-tool.md) | 从零创建 Tool Project：manifest、Tool Entry、Parameter/Inspector/Asset/Output 与构建验证 |
+| [export.md](./export.md) | Visual Output 声明、确定性导出回调与 Host 侧下载流程 |
 
 ## 核心约束
 
-- Tool 只能从 `$lib/tool-sdk/index.js`、`$lib/components/shell/index.js` 和 `$lib/components/ui/index.js` 导入 framework 能力，不直接依赖 `$lib/runtime/` 内部路径。
-- 目录结构必须是：`src/tools/<tool-id>/metadata.json`、`index.ts`、唯一的 root-level master `.svelte`，其余组件放在 `components/`。
-- Heavy tech stack（`three`、`pixi`、`gsap`）在 `index.ts` 的 `techStack` 中声明，通过 framework 统一加载；不直接在顶层导入。
-- 文件输入优先使用 `createToolSourceInput`，不要重复实现 picker、drop、读取和对象 URL 清理。
-- 导出能力由 framework 的 export runtime 统一管理，tool 只声明 metadata 和注册 exporter；不实现下载按钮。
+- 唯一登记点是根 `manifest.json` 与根 `index.ts`；`index.ts` 只有一份 `export default defineVisualTool(...)` 且顶层无副作用。
+- Manifest 只写静态身份、`contractVersion`、`forgeProfile` 与 `libraries`；不写 entry、Parameter、Command、Inspector、Slate 或 Export。
+- Parameter、computed、Constraint 通过 Tool Entry 的 `parameters` named map 声明；合法性权威在 Host Parameter Store。
+- Inspector 是构建期抽取的 retained tree（`createInspector`），条件显示用 `visibleWhen`，不在运行时重建。
+- 私有回调必须登记在 `privateCallbacks` named map（`defineInspectorCallback`），禁止 inline anonymous handler。
+- Canvas/Slate 必须按需动态 import；禁止在 Canvas mount 后注册 exporter。
+- Framework Libraries（`three`、`pixi`、`gsap`、`vgpu`）只由 Forge Profile 经 import map 供给；Tool 不自带 `node_modules` 或第三方 package。
+- 样式使用 Svelte scoped CSS，单位用 px；Container realm 内没有 Host 的 `app.css`，引用共享 design token 时必须提供 fallback。
 
 ## 如何获取帮助
 
-如果某个能力或 API 在公共 SDK 中找不到，请先查阅 [framework developer 文档](../for-framework-developers/overview.md) 了解边界决策，再联系 framework maintainer 评估是否需要扩展 public surface，而不是直接依赖 `$lib/runtime/` 内部路径。
+框架边界与 adapter 细节见 [framework developer 文档](../for-framework-developers/overview.md)；目标 architecture 见 [`../architecture/deshelf-architecture.md`](../architecture/deshelf-architecture.md)。

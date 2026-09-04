@@ -42,8 +42,10 @@ export type {
 	InspectorRoot,
 	ParameterHandle,
 	PrivateCallbackHandle,
+	SectionOptions,
 	SelectOptions,
 	SliderOptions,
 	TextOptions,
-	ToggleOptions
+	ToggleOptions,
+	VisibleWhenOptions
 } from './inspector.ts';

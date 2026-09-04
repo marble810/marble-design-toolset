@@ -5,20 +5,34 @@
  */
 import { error, fail, ok, type Diagnostic, type Result } from './diagnostics.ts';
 import { ID_PATTERN } from './manifest.ts';
+import type { ParameterValue } from './environment.ts';
 
 export type InspectorBinding =
 	| { kind: 'parameter'; parameterId: string }
 	| { kind: 'command'; commandId: string }
 	| { kind: 'private-callback'; callbackId: string };
 
+/**
+ * Conditional visibility rule evaluated by the Host against the live Parameter Store.
+ * The tree itself stays static in the Catalog; visibility only decides whether the Host
+ * renders an element for the current Parameter values (e.g. preset controls that apply
+ * only to one init-map source mode).
+ */
+export interface InspectorVisibilityRule {
+	/** The Parameter whose current value decides visibility. */
+	parameterId: string;
+	/** The element is visible while the Parameter value equals one of these values. */
+	equals: ParameterValue | readonly ParameterValue[];
+}
+
 export type InspectorElement =
-	| { kind: 'label'; id: string; text: string }
-	| { kind: 'section'; id: string; title: string; children: readonly InspectorElement[] }
-	| { kind: 'slider'; id: string; label: string; binding: InspectorBinding; step?: number }
-	| { kind: 'toggle'; id: string; label: string; binding: InspectorBinding }
-	| { kind: 'select'; id: string; label: string; binding: InspectorBinding }
-	| { kind: 'text'; id: string; label: string; binding: InspectorBinding }
-	| { kind: 'button'; id: string; label: string; binding: InspectorBinding };
+	| { kind: 'label'; id: string; text: string; visibleWhen?: InspectorVisibilityRule }
+	| { kind: 'section'; id: string; title: string; children: readonly InspectorElement[]; visibleWhen?: InspectorVisibilityRule }
+	| { kind: 'slider'; id: string; label: string; binding: InspectorBinding; step?: number; visibleWhen?: InspectorVisibilityRule }
+	| { kind: 'toggle'; id: string; label: string; binding: InspectorBinding; visibleWhen?: InspectorVisibilityRule }
+	| { kind: 'select'; id: string; label: string; binding: InspectorBinding; visibleWhen?: InspectorVisibilityRule }
+	| { kind: 'text'; id: string; label: string; binding: InspectorBinding; visibleWhen?: InspectorVisibilityRule }
+	| { kind: 'button'; id: string; label: string; binding: InspectorBinding; visibleWhen?: InspectorVisibilityRule };
 
 export interface InspectorTreeDescriptor {
 	elements: readonly InspectorElement[];
@@ -28,6 +42,39 @@ export interface InspectorTargets {
 	parameters: ReadonlySet<string>;
 	commands: ReadonlySet<string>;
 	callbacks: ReadonlySet<string>;
+}
+
+/** Shared visibility-rule validation for every Inspector element kind. */
+function validateVisibilityRule(
+	rule: unknown,
+	targets: InspectorTargets,
+	diagnostics: Diagnostic[],
+	path: string
+): void {
+	if (rule === undefined) return;
+	if (rule === null || typeof rule !== 'object' || Array.isArray(rule)) {
+		diagnostics.push(error('inspector/visible-when', `visibleWhen must be an object at ${path}`, path));
+		return;
+	}
+	const r = rule as Record<string, unknown>;
+	if (typeof r.parameterId !== 'string' || !targets.parameters.has(r.parameterId)) {
+		diagnostics.push(
+			error('inspector/visible-when', `visibleWhen references unknown parameter '${String(r.parameterId)}' at ${path}`, path)
+		);
+	}
+	const isValue = (v: unknown): v is ParameterValue =>
+		(typeof v === 'number' && Number.isFinite(v)) || typeof v === 'boolean' || typeof v === 'string';
+	if (Array.isArray(r.equals)) {
+		if (r.equals.length === 0 || !r.equals.every((v) => isValue(v))) {
+			diagnostics.push(
+				error('inspector/visible-when', `visibleWhen.equals must be a non-empty array of primitive values at ${path}`, path)
+			);
+		}
+	} else if (!isValue(r.equals)) {
+		diagnostics.push(
+			error('inspector/visible-when', `visibleWhen.equals must be a primitive value or a non-empty array at ${path}`, path)
+		);
+	}
 }
 
 const BINDING_KIND_MAP: Record<string, readonly string[]> = {
@@ -73,6 +120,8 @@ function validateElement(
 	} else {
 		seenIds.add(id);
 	}
+
+	validateVisibilityRule((el as { visibleWhen?: unknown }).visibleWhen, targets, diagnostics, `${path}.${String(id)}`);
 
 	const kind = el.kind;
 	if (kind === 'label') {
