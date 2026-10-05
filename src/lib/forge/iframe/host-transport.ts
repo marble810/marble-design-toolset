@@ -13,7 +13,7 @@
  *
  * This is transport plumbing, not a security boundary: same-origin Tool Containers run
  * in the Host renderer process. A looping tool can freeze the page — failure isolation
- * is explicitly NOT promised (see docs/for-framework-developers/web-iframe-adapter.md).
+ * is explicitly NOT promised: a looping Tool can freeze the Host page.
  */
 import type { EnvironmentEnvelope, EnvironmentTransport, Unsubscribe } from 'tool-contract';
 import type { IframeLike, MessageEventTarget, PostMessageTarget } from './dom.js';

@@ -7,7 +7,7 @@
 	 *
 	 * Same-origin note: the Tool Container shares the Host renderer process — a looping
 	 * tool can freeze this page. Failure isolation is NOT promised; Restart is the
-	 * recovery path (see docs/for-framework-developers/web-iframe-adapter.md).
+	 * recovery path when the Host remains responsive.
 	 */
 	import { onMount } from 'svelte';
 	import type { CatalogEntry, Diagnostic } from 'tool-contract';

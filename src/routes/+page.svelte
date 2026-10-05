@@ -8,7 +8,7 @@
 	 * Visual Output export, Restart/Reload/Reset diagnostics.
 	 *
 	 * Run `bun ./scripts/build-web-catalog.ts` (or `bun dev`) so /deshelf/catalog.json
-	 * exists. See docs/for-framework-developers/web-iframe-adapter.md.
+	 * exists. Markdown checkpoint records are not part of the application.
 	 */
 	import { onMount } from 'svelte';
 	import type { CatalogEntry } from 'tool-contract';

@@ -24,6 +24,26 @@ _Avoid_: Deshelf Framework, DeFramework, ProvideModules
 消费 Catalog、创建 Tool Session、持有 Parameter Store，并提供 Standard Inspector、Workspace、Environment Inventory 与 diagnostics 的运行宿主。
 _Avoid_: SubToolsManager, Tool Manager
 
+**Host UI**:
+Deshelf Host 的宿主表现层，负责 Workspace、Standard Inspector、操作反馈与界面局部状态；不持有应用运行的权威状态。
+_Avoid_: 前前端, Front-front-end, Host Core
+
+**Host Core**:
+Deshelf Host 的宿主应用核心，负责应用用例、权威状态、规则与运行协调；它不表示远程服务器或原生进程。
+_Avoid_: 前后端, Client Backend, BFF, Deshelf Host 的同义词
+
+**Native Services**:
+Deshelf Desktop 提供编译、系统 API 与原生 IO 的原生服务，不承载整个 Host Core。
+_Avoid_: 后后端, Remote Backend, Tool Container
+
+**Platform Adapters**:
+Deshelf 应用核心访问平台能力的适配边界，连接浏览器能力或 Desktop 原生服务。
+_Avoid_: Environment API, Native Services 的同义词
+
+**Mock Host Core**:
+供 Host UI 原型使用的应用核心替身，以内存状态和可控场景提供数据、状态变化与操作反馈，不是真实 Tool 运行引擎。
+_Avoid_: Mock Server, Fake Environment API, Prototype Session Engine
+
 **Environment API**:
 Deshelf Host 与 Tool Container 之间轻量、统一的运行管理 interface；Web 与 Desktop 保持相同语义并使用不同 transport adapters。它用于环境供给与状态同步，不是防御恶意 Tool 的安全协议，渲染和模拟热路径不经过该 seam。
 _Avoid_: Tool Runtime Protocol, Capability Broker, Raw IPC, Ad-hoc postMessage
@@ -79,7 +99,7 @@ Catalog 中对应一个已成功构建 Visual Tool 的可序列化记录，包�
 _Avoid_: Tool Manifest, Tool Registration Payload, Tool Bundle
 
 **Tool Entry**:
-Tool Project 以 `defineVisualTool` 描述 Visual Tool 的唯一 TypeScript 入口；Deshelf Forge 在构建期从中抽出 Catalog Entry，并把运行函数、Canvas 与可选 Tool Slate 留在 artifacts 中。
+Tool Project 以 `defineVisualTool` 描述 Visual Tool 的唯一 TypeScript 入口；Deshelf Forge 在构建期从中抽出 Catalog Entry，并把运行函数、Frame 内容与可选 Tool Slate 留在 artifacts 中。
 _Avoid_: Canvas Entry, Inspector Entry, Multiple Tool Entries, Runtime Registration
 
 **Tool Bundle**:
@@ -87,7 +107,7 @@ Tool Project 构建出的可运行产物集合，包含 Catalog Entry 引用的 
 _Avoid_: Tool Package, Plugin Bundle, Catalog Entry
 
 **Tool Surface**:
-Visual Tool 在 Tool Container 中呈现的一块 UI；Canvas 必须存在，Tool Slate 可选。
+Tool Session 在 Tool Container 中呈现的一块 UI；统一 Canvas 必须存在，Tool Slate 可选。
 _Avoid_: Tool Entry, Host Panel, Standard Inspector
 
 **Tool Container**:
@@ -177,8 +197,20 @@ _Avoid_: Anonymous Inspector Handler, Public Tool Command, Runtime Callback Regi
 _Avoid_: Inspector Extension Surface, Auxiliary Surface, Unreal Slate
 
 **Canvas**:
-Workspace 中呈现 Visual Tool 主要视觉效果的 Tool Surface。
-_Avoid_: Preview Manager, Render Panel, Standard Inspector
+Workspace 中由 Deshelf 统一管理、用于排列 Frame 并浏览其内容的视觉工作区域；同一时刻只呈现一个 Tool Session 的视图。
+_Avoid_: Tool-authored Canvas, Frame, HTMLCanvasElement
+
+**Canvas Ready**:
+统一 Canvas 已可操作且初始 Frame 结构已建立的生命周期状态；Frame 可以为空或仍在加载，不代表所有视觉结果已就绪。
+_Avoid_: All Frames Ready, First Output Ready
+
+**Frame Definition**:
+Visual Tool 对一类视觉内容的可复用定义；同一个定义可以产生零个或多个 Frame。
+_Avoid_: Frame Instance, Visual Output
+
+**Frame**:
+Frame Definition 的一个具有独立逻辑尺寸和内容边界的运行时视觉实例，可以展示最终效果、中间态或调试内容；它是视图，不等同于可导出的 Visual Output。
+_Avoid_: Visual Output, Export Artifact
 
 ## 作者工作流
 

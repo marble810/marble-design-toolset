@@ -11,8 +11,7 @@
  *
  * Both executors receive Forge Profile resources through the deployable resolver, never
  * through monorepo source paths. Under Electron the child runs with
- * `ELECTRON_RUN_AS_NODE=1`; the packaging step ships the runner as compiled JS (see
- * docs/for-framework-developers/desktop-adapter.md).
+ * `ELECTRON_RUN_AS_NODE=1`; the packaging step ships the runner as compiled JS.
  */
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
